@@ -1,5 +1,5 @@
 // Change VERSION on every release: it triggers the "update available" banner and refreshes the cache.
-const VERSION = '1.2.1';
+const VERSION = '1.2.2';
 const CACHE = 'mylifts-' + VERSION, CDN = 'mylifts-cdn';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'firebase-config.js', 'manifest.json',
   'icon-192.png', 'icon-512.png', 'icon-maskable.png'];

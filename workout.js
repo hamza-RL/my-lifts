@@ -16,6 +16,8 @@ const e1rm = (w, r) => (w && r ? Math.round(w * (1 + r / 30) * 10) / 10 : 0);
 const counts = s => s.done && (s.type !== 'warmup' || cfg.warmupInStats);
 const fmtT = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+// After saving or discarding, stay on the Workout tab (re-render it even if the hash is already #/workout).
+const goWorkout = () => (location.hash === '#/workout' ? dispatchEvent(new Event('hashchange')) : (location.hash = '#/workout'));
 export const hasActive = async () => !!(W || (await S.get('activeWorkout/current')));
 
 export async function startWorkout(routine) {
@@ -142,7 +144,7 @@ export async function liveView(v) {
       save(); draw(v);
     } else if (l === 'r-15' || l === 'r+15') { if (W.rest) W.rest.end += (l === 'r+15' ? 15000 : -15000); tick(); save(); }
     else if (l === 'rskip') { W.rest = null; tick(); save(); }
-    else if (l === 'disc') { if (confirm('Discard this workout? This cannot be undone.')) { W = null; await S.del('activeWorkout/current'); location.hash = '#/home'; } }
+    else if (l === 'disc') { if (confirm('Discard this workout? This cannot be undone.')) { W = null; await S.del('activeWorkout/current'); goWorkout(); } }
     else if (l === 'fin') finish(v);
   };
 }
@@ -179,7 +181,7 @@ async function finish(v) {
       S.set('routines/r_' + Date.now().toString(36), { title: w.title, order: 99, folderId: null, updatedAt: Date.now(), exercises: done.map(x => ({ exerciseId: x.exerciseId, restSec: x.restSec, notes: '', supersetId: null, sets: x.sets.map(s => ({ type: s.type, weight: s.weight, repsMin: s.reps, repsMax: s.reps })) })) });
     }
     W = null; ST = {}; await S.del('activeWorkout/current'); d.close();
-    toast(prs.length ? 'Saved. New PR: ' + prs.slice(0, 2).join(', ') : 'Workout saved.'); const was = location.hash; location.hash = '#/home'; if (was === '#/home') dispatchEvent(new Event('hashchange'));
+    toast(prs.length ? 'Saved. New PR: ' + prs.slice(0, 2).join(', ') : 'Workout saved.'); goWorkout();
   };
 }
 
