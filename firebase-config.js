@@ -1,4 +1,4 @@
-// Public Firebase web config
+// Public Firebase web config (safe to be public; your data is protected by the Firestore rules).
 export const firebaseConfig = {
   apiKey: "AIzaSyDoK26wsnKN0cB86XXnnGa0LhfFm5kXxhE",
   authDomain: "my-lifts-8572d.firebaseapp.com",

@@ -1,13 +1,10 @@
 import * as S from './store.js';
 import { hasActive, historyHtml, showWorkout, importStart } from './workout.js';
 import { seedOnce, exercisesView, workoutView } from './views.js';
-import { analyticsView } from './analytics.js';
-import { bodyView } from './body.js';
-import { nutritionView } from './nutrition.js';
 
 const $ = (s, r = document) => r.querySelector(s), root = $('#app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-let settings, reg, version = '1.3.0', refreshing = false;
+let settings, reg, version = '…', refreshing = false;
 
 const VOL = [['off', 'Off'], ['low', 'Low'], ['normal', 'Normal'], ['high', 'High']];
 const FIELDS = [
@@ -15,10 +12,6 @@ const FIELDS = [
   ['weightUnit', 'Weight unit', 'select', [['kg', 'kg'], ['lb', 'lb']]],
   ['distUnit', 'Distance unit', 'select', [['km', 'km'], ['mi', 'mi']]],
   ['weekStart', 'Week starts on', 'select', [['mon', 'Monday'], ['sun', 'Sunday']]],
-  ['kcalTrain', 'Training Day Calories', 'num'],
-  ['proteinTrain', 'Training Day Protein (g)', 'num'],
-  ['kcalRest', 'Rest Day Calories', 'num'],
-  ['proteinRest', 'Rest Day Protein (g)', 'num'],
   ['restOn', 'Automatic rest timer', 'check'],
   ['restBig', 'Rest on big lifts (seconds)', 'num'],
   ['restSmall', 'Rest on small exercises (seconds)', 'num'],
@@ -36,18 +29,11 @@ const FIELDS = [
     [['exercise', 'Last workout with this exercise'], ['routine', 'Last workout of this routine']]]
 ];
 const IC = d => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
-
-const TABS = [
-  ['home', IC('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10'), 'Home'], 
-  ['workout', IC('M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12'), 'Workout'],
-  ['exercises', IC('M4 6h16M4 12h16M4 18h10'), 'Exercises'], 
-  ['analytics', IC('M3 3v18h18 M18 17l-5-5-4 4-4-5'), 'Stats'],
-  ['body', IC('M12 2a3 3 0 00-3 3v2a3 3 0 006 0V5a3 3 0 00-3-3z M5 10v9a2 2 0 002 2h10a2 2 0 002-2v-9'), 'Body'],
-  ['food', IC('M7 3v8M11 3v8M7 7h4M9 11v10M17 3c-2 2-2 8 0 9v9'), 'Food'],
-  ['profile', IC('M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-6 8-6s8 2 8 6'), 'Profile']
-];
-
-const views = { home, workout: workoutView, exercises: exercisesView, analytics: analyticsView, body: bodyView, food: nutritionView, profile };
+const TABS = [['home', IC('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10'), 'Home'], ['workout', IC('M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12'), 'Workout'],
+  ['exercises', IC('M4 6h16M4 12h16M4 18h10'), 'Exercises'], ['food', IC('M7 3v8M11 3v8M7 7h4M9 11v10M17 3c-2 2-2 8 0 9v9'), 'Food'],
+  ['profile', IC('M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-6 8-6s8 2 8 6'), 'Profile']];
+const soon = (t, p) => v => { v.innerHTML = `<h1>${t}</h1><div class="card">Coming in ${p}.</div>`; };
+const views = { home, workout: workoutView, exercises: exercisesView, food: soon('Nutrition', 'its own phase after Phase 2'), profile };
 
 function toast(m) {
   let t = $('#toast');
@@ -55,7 +41,6 @@ function toast(m) {
   t.textContent = m; t.hidden = false;
   clearTimeout(t._t); t._t = setTimeout(() => t.hidden = true, 3500);
 }
-
 function ask(title, fields) {
   return new Promise(res => {
     const d = document.createElement('dialog');
@@ -66,15 +51,14 @@ function ask(title, fields) {
     d.onclose = () => { res(d.returnValue === 'ok' ? Object.fromEntries(new FormData(d.querySelector('form'))) : null); d.remove(); };
   });
 }
-
 function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
-  try { localStorage.setItem('ml-theme', settings.theme); } catch {}
+  try { localStorage.setItem('ml-theme', settings.theme); } catch { /* ignore */ }
 }
-
 const fatal = e => { root.innerHTML = `<main class="center"><div class="card"><h2>Something went wrong</h2>
   <p class="err">${esc(S.errMsg(e))}</p><button class="btn" onclick="location.reload()">Try again</button></div></main>`; };
 
+// ---------- Auth screen ----------
 function showAuth() {
   let m = 'in';
   const draw = () => {
@@ -100,12 +84,12 @@ function showAuth() {
   draw();
 }
 
+// ---------- Shell and router ----------
 function shell() {
   root.innerHTML = `<div id="view"></div><nav aria-label="Main">${TABS.map(([k, i, l]) =>
     `<a href="#/${k}" data-k="${k}"><span aria-hidden="true">${i}</span>${l}</a>`).join('')}</nav>`;
   route();
 }
-
 async function route() {
   const v = $('#view'); if (!v) return;
   const k = location.hash.slice(2) || 'home', key = views[k] ? k : 'home';
@@ -176,6 +160,32 @@ document.addEventListener('click', async e => {
   } catch (err) { toast(S.errMsg(err)); }
 });
 
+// ---------- Service worker and "update available" ----------
+function banner() {
+  if ($('#upd')) return;
+  const d = document.createElement('div'); d.id = 'upd';
+  d.innerHTML = '<span>A new version is available.</span><button data-a="upd">Update</button>';
+  document.body.prepend(d);
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(r => {
+    if (!r) return;
+    reg = r;
+    if (r.waiting && navigator.serviceWorker.controller) banner();
+    r.addEventListener('updatefound', () => {
+      const w = r.installing;
+      w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) banner(); });
+    });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) r.update(); });
+  });
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (refreshing) location.reload(); });
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.version) { version = e.data.version; const el = $('#ver'); if (el) el.textContent = version; }
+  });
+  navigator.serviceWorker.ready.then(r => r.active.postMessage('version'));
+}
+
+// ---------- Start ----------
 S.watchAuth(async u => {
   try {
     if (S.cloudConfigured && !u) return showAuth();

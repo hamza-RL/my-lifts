@@ -1,6 +1,8 @@
-const VERSION = '1.3.0';
+// Change VERSION on every release: it triggers the "update available" banner and refreshes the cache.
+const VERSION = '1.2.1';
 const CACHE = 'mylifts-' + VERSION, CDN = 'mylifts-cdn';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'analytics.js', 'body.js', 'nutrition.js', 'food-data.js', 'firebase-config.js', 'manifest.json'];
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'firebase-config.js', 'manifest.json',
+  'icon-192.png', 'icon-512.png', 'icon-maskable.png'];
 
 self.addEventListener('install', e => e.waitUntil(
   caches.open(CACHE).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' }))))));
@@ -18,12 +20,12 @@ self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url);
   if (r.method !== 'GET') return;
   if (u.origin === location.origin) {
-    if (u.pathname.endsWith('firebase-config.js')) {
+    if (u.pathname.endsWith('firebase-config.js')) { // always fetch the newest config, fall back to cache offline
       e.respondWith(fetch(r).catch(() => caches.match(r, { ignoreSearch: true })));
       return;
     }
     e.respondWith(caches.match(r, { ignoreSearch: true }).then(c => c || fetch(r).catch(() => caches.match('./'))));
-  } else if (u.hostname === 'www.gstatic.com') {
+  } else if (u.hostname === 'www.gstatic.com') { // Firebase SDK: cache so the app opens offline
     e.respondWith(caches.open(CDN).then(async c => {
       const m = await c.match(r);
       const n = fetch(r).then(x => { c.put(r, x.clone()); return x; }).catch(() => m);
