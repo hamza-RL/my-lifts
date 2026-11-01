@@ -3,15 +3,17 @@ import { firebaseConfig as C, FIREBASE_VERSION as V } from './firebase-config.js
 export const SCHEMA_VERSION = 1;
 export const cloudConfigured = !!C.apiKey;
 export const COLLECTIONS = ['settings', 'exercises', 'routineFolders', 'routines', 'workouts', 'exerciseStats',
-  'activeWorkout', 'measurements', 'photoMeta', 'photoData', 'meta'];
-const USER_DATA = ['exercises', 'routineFolders', 'routines', 'workouts', 'exerciseStats', 'measurements', 'photoMeta', 'photoData'];
+  'activeWorkout', 'measurements', 'photoMeta', 'photoData', 'foodLogs', 'foods', 'savedMeals', 'meta'];
+const USER_DATA = ['exercises', 'routineFolders', 'routines', 'workouts', 'exerciseStats', 'measurements', 'photoMeta', 'photoData', 'foodLogs', 'foods', 'savedMeals'];
 
 // New settings added in future versions only need a default here: old data keeps working.
 export const DEFAULT_SETTINGS = {
   theme: 'dark', weightUnit: 'kg', distUnit: 'km', weekStart: 'mon', timezone: 'Africa/Casablanca',
   restOn: true, restBig: 150, restSmall: 90, timerSound: 'beep', timerVolume: 'normal', setSound: true,
   prVolume: 'normal', keepAwake: true, rpe: false, warmupCalc: true, warmupSteps: [[50, 10], [70, 5], [85, 2]],
-  rounding: 2.5, barWeight: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], warmupInStats: false, previousFrom: 'exercise'
+  rounding: 2.5, barWeight: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], warmupInStats: false, previousFrom: 'exercise',
+  // Nutrition (used from its own phase): training-day and rest-day targets, Moroccan spoon (m3l9a) in grams, glass in ml
+  kcalTrain: 0, proteinTrain: 0, carbsTrain: 0, fatTrain: 0, kcalRest: 0, proteinRest: 0, carbsRest: 0, fatRest: 0, spoonG: 12, glassMl: 250
 };
 
 // ---------- Local store (demo mode + offline drafts), IndexedDB ----------

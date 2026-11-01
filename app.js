@@ -1,4 +1,5 @@
 import * as S from './store.js';
+import { seedOnce, exercisesView, workoutView } from './views.js';
 
 const $ = (s, r = document) => r.querySelector(s), root = $('#app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -26,11 +27,12 @@ const FIELDS = [
   ['previousFrom', 'Previous values come from', 'select',
     [['exercise', 'Last workout with this exercise'], ['routine', 'Last workout of this routine']]]
 ];
-const TABS = [['home', '🏠', 'Home'], ['routines', '📋', 'Routines'], ['workout', '➕', 'Workout'],
-  ['exercises', '🏋️', 'Exercises'], ['profile', '👤', 'Profile']];
+const IC = d => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+const TABS = [['home', IC('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10'), 'Home'], ['workout', IC('M6 7v10M3 9v6M18 7v10M21 9v6M6 12h12'), 'Workout'],
+  ['exercises', IC('M4 6h16M4 12h16M4 18h10'), 'Exercises'], ['food', IC('M7 3v8M11 3v8M7 7h4M9 11v10M17 3c-2 2-2 8 0 9v9'), 'Food'],
+  ['profile', IC('M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-6 8-6s8 2 8 6'), 'Profile']];
 const soon = (t, p) => v => { v.innerHTML = `<h1>${t}</h1><div class="card">Coming in ${p}.</div>`; };
-const views = { home, routines: soon('Routines', 'Phase 1b'), workout: soon('Workout', 'Phase 1b'),
-  exercises: soon('Exercises', 'Phase 1b'), profile };
+const views = { home, workout: workoutView, exercises: exercisesView, food: soon('Nutrition', 'its own phase after Phase 2'), profile };
 
 function toast(m) {
   let t = $('#toast');
@@ -59,12 +61,12 @@ const fatal = e => { root.innerHTML = `<main class="center"><div class="card"><h
 function showAuth() {
   let m = 'in';
   const draw = () => {
-    root.innerHTML = `<main class="center"><h1>My Lifts</h1><form id="af" class="card">
+    root.innerHTML = `<main class="center"><h1>My Lifts</h1><form id="af" class="card"><div class="seg"><button type="button" data-m="in" class="${m === 'in' ? 'on' : ''}">Sign in</button><button type="button" data-m="up" class="${m === 'up' ? 'on' : ''}">Create account</button></div>
       <label>Email<input name="email" type="email" required autocomplete="email"></label>
       ${m === 'reset' ? '' : `<label>Password<input name="pw" type="password" required minlength="6" autocomplete="${m === 'in' ? 'current-password' : 'new-password'}"></label>`}
       <p id="err" class="err" role="alert"></p>
       <button class="btn">${{ in: 'Sign in', up: 'Create account', reset: 'Send reset email' }[m]}</button>
-      <p class="links"><a href="#" data-m="in">Sign in</a> | <a href="#" data-m="up">Create account</a> | <a href="#" data-m="reset">Forgot password</a></p></form></main>`;
+      <p class="links"><a href="#" data-m="reset">Forgot password?</a></p></form></main>`;
     root.querySelectorAll('[data-m]').forEach(a => a.onclick = e => { e.preventDefault(); m = a.dataset.m; draw(); });
     $('#af').onsubmit = async e => {
       e.preventDefault();
@@ -95,6 +97,7 @@ async function route() {
   try { await views[key](v); } catch (e) { v.innerHTML = `<p class="err">${esc(S.errMsg(e))}</p>`; }
 }
 addEventListener('hashchange', route);
+addEventListener('toast', e => toast(e.detail));
 addEventListener('store-error', e => toast(S.errMsg(e.detail)));
 
 async function home(v) {
@@ -185,6 +188,6 @@ S.watchAuth(async u => {
       root.innerHTML = '<main class="center"><div class="card"><h2>Please update the app</h2><p>Your data was saved by a newer version. Reload the page to get it.</p></div></main>';
       return;
     }
-    settings = await S.getSettings(); applyTheme(); shell();
+    await seedOnce(); settings = await S.getSettings(); applyTheme(); shell();
   } catch (e) { fatal(e); }
 }).catch(fatal);

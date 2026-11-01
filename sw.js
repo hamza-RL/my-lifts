@@ -1,7 +1,7 @@
 // Change VERSION on every release: it triggers the "update available" banner and refreshes the cache.
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE = 'mylifts-' + VERSION, CDN = 'mylifts-cdn';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'firebase-config.js', 'manifest.json',
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'firebase-config.js', 'manifest.json',
   'icon-192.png', 'icon-512.png', 'icon-maskable.png'];
 
 self.addEventListener('install', e => e.waitUntil(
