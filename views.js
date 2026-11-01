@@ -1,12 +1,14 @@
 import * as S from './store.js';
+import { hasActive, liveView, startWorkout } from './workout.js';
 import { SEED, SEED_ROUTINES, MUSCLES, EQUIP, TYPES, slug } from './data.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const toast = m => dispatchEvent(new CustomEvent('toast', { detail: m }));
+export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export const toast = m => dispatchEvent(new CustomEvent('toast', { detail: m }));
 let custom = [];
 const all = () => [...SEED, ...custom].sort((a, b) => a.name.localeCompare(b.name));
-const exName = id => all().find(x => x.id === id)?.name || id;
+export const exById = id => all().find(x => x.id === id);
+export const exName = id => all().find(x => x.id === id)?.name || id;
 
 export async function seedOnce() {
   const m = await S.get('meta/seed');
@@ -24,7 +26,7 @@ export async function seedOnce() {
   await S.set('meta/seed', { ...(m || {}), routines: true });
 }
 
-function sheet(html) {
+export function sheet(html) {
   const d = document.createElement('dialog');
   d.className = 'sheet'; d.innerHTML = `<div class="sb">${html}</div>`;
   document.body.append(d); d.showModal();
@@ -101,6 +103,7 @@ function form(x, done) {
 
 // ---------- Workout tab: routines ----------
 export async function workoutView(v) {
+  if (await hasActive()) return liveView(v);
   custom = await S.list('exercises');
   const rs = (await S.list('routines')).sort((a, b) => a.order - b.order);
   v.innerHTML = `<header class="top"><h1>Workout</h1></header>
@@ -108,9 +111,10 @@ export async function workoutView(v) {
     ${rs.map(r => `<article class="card rt"><div class="rh"><b>${esc(r.title)}</b><button class="icon" data-m="${esc(r.id)}" aria-label="Actions for ${esc(r.title)}">⋯</button></div>
       <p class="muted">${r.exercises.length} exercises · ${r.exercises.reduce((n, e) => n + e.sets.length, 0)} sets</p>
       <p class="prev">${esc(r.exercises.map(e => exName(e.exerciseId)).join(', '))}</p>
-      <button class="btn" data-w="start">Start routine</button></article>`).join('') || '<p class="muted">No routines yet.</p>'}`;
-  v.onclick = e => {
-    if (e.target.closest('[data-w]')) return toast('Live workouts arrive in the next step.');
+      <button class="btn" data-w="start" data-id="${esc(r.id)}">Start routine</button></article>`).join('') || '<p class="muted">No routines yet.</p>'}`;
+  v.onclick = async e => {
+    const sb = e.target.closest('[data-w]');
+    if (sb) { await startWorkout(rs.find(x => x.id === sb.dataset.id) || null); return workoutView(v); }
     const m = e.target.closest('[data-m]'); if (!m) return;
     const r = rs.find(x => x.id === m.dataset.m);
     const d = sheet(`<h3>${esc(r.title)}</h3><button class="btn2" data-a="dup">Duplicate</button><button class="btn2 danger" data-a="del">Delete</button>`);
@@ -123,4 +127,17 @@ export async function workoutView(v) {
       workoutView(v);
     };
   };
+}
+
+export function pickExercise() {
+  return new Promise(res => {
+    const d = sheet('<h3>Add exercise</h3><input id="pq" type="search" placeholder="Search exercises" aria-label="Search"><div id="pl"></div>');
+    let pick = null;
+    const draw = () => { const q = $('#pq', d).value.toLowerCase(); $('#pl', d).innerHTML = all().filter(x => x.name.toLowerCase().includes(q)).slice(0, 60).map(x =>
+      `<button class="item" data-id="${esc(x.id)}"><span class="bdg" style="--h:${hue(x.primary)}">${esc(x.primary[0].toUpperCase())}</span><span><b>${esc(x.name)}</b><small>${esc(x.primary)} · ${esc(x.equipment)}</small></span></button>`).join(''); };
+    S.list('exercises').then(c => { custom = c; draw(); });
+    $('#pq', d).oninput = draw;
+    d.onclick = e => { const i = e.target.closest('.item'); if (i) { pick = i.dataset.id; d.close(); } };
+    d.addEventListener('close', () => res(pick));
+  });
 }

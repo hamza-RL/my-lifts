@@ -1,4 +1,5 @@
 import * as S from './store.js';
+import { hasActive, historyHtml, showWorkout, importStart } from './workout.js';
 import { seedOnce, exercisesView, workoutView } from './views.js';
 
 const $ = (s, r = document) => r.querySelector(s), root = $('#app');
@@ -93,7 +94,7 @@ async function route() {
   const v = $('#view'); if (!v) return;
   const k = location.hash.slice(2) || 'home', key = views[k] ? k : 'home';
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.k === key));
-  v.innerHTML = '';
+  v.innerHTML = ''; v.onclick = v.oninput = null;
   try { await views[key](v); } catch (e) { v.innerHTML = `<p class="err">${esc(S.errMsg(e))}</p>`; }
 }
 addEventListener('hashchange', route);
@@ -103,9 +104,11 @@ addEventListener('store-error', e => toast(S.errMsg(e.detail)));
 async function home(v) {
   const d = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: settings.timezone });
   let h = `<h1>My Lifts</h1><p class="muted">${esc(d)}</p>`;
+  if (await hasActive()) h += '<a class="card resume" href="#/workout"><b>Workout in progress</b><br><span class="muted">Tap to resume</span></a>';
   if (!S.cloudConfigured) h += `<div class="card warn"><b>Demo mode</b><p>Your data stays on this device. Add your Firebase config in <code>firebase-config.js</code> to sync across devices.</p></div>`;
   else if (await S.localCount()) h += `<div class="card warn"><b>Data found on this device</b><p>Upload your demo data to your account?</p><button class="btn" data-a="upload">Upload my local data</button></div>`;
-  v.innerHTML = h + `<div class="card"><b>This week</b><p class="muted">0 workouts. Workout logging arrives in Phase 1b.</p></div>`;
+  v.innerHTML = h + `<div class="card"><b>Get started</b><p class="muted">Pick a routine on the Workout tab.</p></div>` + await historyHtml();
+  v.onclick = e => { const b = e.target.closest('[data-h]'); if (b) showWorkout(b.dataset.h, route); };
 }
 
 async function profile(v) {
@@ -119,7 +122,7 @@ async function profile(v) {
       <button class="btn2" data-a="email">Change email</button><button class="btn2" data-a="pw">Change password</button>
       <button class="btn2" data-a="out">Sign out</button><button class="btn2 danger" data-a="del">Delete account and all data</button>`
       : '<p class="muted">Demo mode: no account yet.</p>'}</div>
-    <h2>Data</h2><div class="card"><button class="btn2" data-a="backup">Download JSON backup</button></div>
+    <h2>Data</h2><div class="card"><button class="btn2" data-a="backup">Download JSON backup</button><button class="btn2" data-a="seed">Import my starting numbers</button></div>
     <h2>About</h2><div class="card"><p>App version: <b id="ver">${esc(version)}</b><br>Data schema version: <b>${S.SCHEMA_VERSION}</b><br>
       Mode: ${S.cloudConfigured ? 'Cloud sync' : 'Demo (this device only)'}</p><button class="btn2" data-a="check">Check for updates</button></div>`;
   $('#sf').onchange = async e => {
@@ -139,6 +142,7 @@ document.addEventListener('click', async e => {
     if (k === 'backup') await S.downloadBackup();
     else if (k === 'check') { await reg?.update(); toast('You are up to date, or an update banner will appear.'); }
     else if (k === 'upd') { refreshing = true; reg.waiting?.postMessage('skip'); }
+    else if (k === 'seed') toast(`Imported ${await importStart()} exercises`);
     else if (k === 'out') await S.logOut();
     else if (k === 'upload') {
       if (confirm('Upload local data to your account and clear the local copy?')) { toast(`Uploaded ${await S.uploadLocal()} items`); route(); }
@@ -165,6 +169,7 @@ function banner() {
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(r => {
+    if (!r) return;
     reg = r;
     if (r.waiting && navigator.serviceWorker.controller) banner();
     r.addEventListener('updatefound', () => {
