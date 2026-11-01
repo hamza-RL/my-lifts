@@ -1,26 +1,28 @@
 import { firebaseConfig as C, FIREBASE_VERSION as V } from './firebase-config.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const cloudConfigured = !!C.apiKey;
 export const COLLECTIONS = ['settings', 'exercises', 'routineFolders', 'routines', 'workouts', 'exerciseStats',
   'activeWorkout', 'measurements', 'photoMeta', 'photoData', 'foodLogs', 'foods', 'savedMeals', 'meta'];
 const USER_DATA = ['exercises', 'routineFolders', 'routines', 'workouts', 'exerciseStats', 'measurements', 'photoMeta', 'photoData', 'foodLogs', 'foods', 'savedMeals'];
 
-// New settings added in future versions only need a default here: old data keeps working.
 export const DEFAULT_SETTINGS = {
   theme: 'dark', weightUnit: 'kg', distUnit: 'km', weekStart: 'mon', timezone: 'Africa/Casablanca',
   restOn: true, restBig: 150, restSmall: 90, timerSound: 'beep', timerVolume: 'normal', setSound: true,
   prVolume: 'normal', keepAwake: true, rpe: false, warmupCalc: true, warmupSteps: [[50, 10], [70, 5], [85, 2]],
   rounding: 2.5, barWeight: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], warmupInStats: false, previousFrom: 'exercise',
-  // Nutrition (used from its own phase): training-day and rest-day targets, Moroccan spoon (m3l9a) in grams, glass in ml
-  kcalTrain: 0, proteinTrain: 0, carbsTrain: 0, fatTrain: 0, kcalRest: 0, proteinRest: 0, carbsRest: 0, fatRest: 0, spoonG: 12, glassMl: 250
+  kcalTrain: 2400, proteinTrain: 160, carbsTrain: 250, fatTrain: 70, 
+  kcalRest: 2100, proteinRest: 150, carbsRest: 200, fatRest: 65,
+  spoonG: 12, glassMl: 250
 };
 
-// ---------- Local store (demo mode + offline drafts), IndexedDB ----------
 let dbp;
 const idb = () => dbp ||= new Promise((res, rej) => {
-  const r = indexedDB.open('mylifts', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('docs');
+  const r = indexedDB.open('mylifts', 2);
+  r.onupgradeneeded = (e) => {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs');
+  };
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
 });
@@ -43,14 +45,12 @@ const local = {
   }
 };
 
-// ---------- Cloud store (Firestore under users/{uid}/...) ----------
 let fb, db, auth, uid, mode = 'local';
 const ref = p => fb.doc(db, 'users', uid, ...p.split('/'));
 const cref = c => fb.collection(db, 'users', uid, c);
 const fail = e => window.dispatchEvent(new CustomEvent('store-error', { detail: e }));
 const cloud = {
   async get(p) { const s = await fb.getDoc(ref(p)); return s.exists() ? s.data() : null; },
-  // Writes go to the offline cache first and sync in the background, so they never block the UI.
   set(p, d) { fb.setDoc(ref(p), d).catch(fail); return Promise.resolve(); },
   del(p) { fb.deleteDoc(ref(p)).catch(fail); return Promise.resolve(); },
   async list(c) { return (await fb.getDocs(cref(c))).docs.map(d => ({ id: d.id, ...d.data() })); }
@@ -72,33 +72,21 @@ export async function watchAuth(cb) {
     localCache: fb.persistentLocalCache({ tabManager: fb.persistentMultipleTabManager() })
   });
   auth = fb.getAuth(app);
-  fb.onAuthStateChanged(auth, u => { uid = u?.uid; mode = u ? 'cloud' : 'local'; cb(u); });
+  
+  fb.onAuthStateChanged(auth, u => {
+    uid = u?.uid;
+    mode = u ? 'cloud' : 'local';
+    cb(u);
+  });
 }
 
-// ---------- Schema version, migrations, settings ----------
-// Add migrations as MIGRATIONS[2] = async () => {...}. Each must be safe to run on old data.
-const MIGRATIONS = {};
-export async function ensureSchema() {
-  const m = await get('meta/app');
-  if (!m) { await set('meta/app', { schemaVersion: SCHEMA_VERSION, createdAt: Date.now() }); return { ok: true }; }
-  const v = m.schemaVersion || 1;
-  if (v > SCHEMA_VERSION) return { ok: false };
-  if (v < SCHEMA_VERSION) {
-    if (confirm('My Lifts needs to update how your data is stored. Download a backup first? (Recommended)')) await downloadBackup();
-    for (let n = v + 1; n <= SCHEMA_VERSION; n++) await MIGRATIONS[n]?.();
-    await set('meta/app', { ...m, schemaVersion: SCHEMA_VERSION, migratedAt: Date.now() });
-  }
-  return { ok: true };
-}
 export const getSettings = async () => ({ ...DEFAULT_SETTINGS, ...((await get('settings/main')) || {}) });
 export const saveSettings = s => set('settings/main', s);
-
-// ---------- Backup and demo-to-cloud upload ----------
-export async function exportAll() {
+export const exportAll = async () => {
   const out = { app: 'my-lifts', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), data: {} };
   for (const c of COLLECTIONS) out.data[c] = await list(c);
   return out;
-}
+};
 export async function downloadBackup() {
   const blob = new Blob([JSON.stringify(await exportAll(), null, 1)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -121,12 +109,11 @@ export async function uploadLocal() {
       if (++n % 400 === 0) { await b.commit(); b = fb.writeBatch(db); }
     }
   }
-  await b.commit(); // needs a connection; throws if offline, so local data is kept
+  await b.commit();
   await tx('readwrite', s => s.clear());
   return n;
 }
 
-// ---------- Auth ----------
 const ERR = {
   'auth/invalid-credential': 'Wrong email or password.', 'auth/wrong-password': 'Wrong email or password.',
   'auth/user-not-found': 'Wrong email or password.', 'auth/email-already-in-use': 'That email already has an account.',
