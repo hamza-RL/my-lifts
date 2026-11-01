@@ -1,4 +1,5 @@
 import * as S from './store.js';
+import { exerciseDetail } from './stats.js';
 import { hasActive, liveView, startWorkout } from './workout.js';
 import { SEED, SEED_ROUTINES, MUSCLES, EQUIP, TYPES, slug } from './data.js';
 
@@ -7,6 +8,7 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 export const toast = m => dispatchEvent(new CustomEvent('toast', { detail: m }));
 let custom = [];
 const all = () => [...SEED, ...custom].sort((a, b) => a.name.localeCompare(b.name));
+export const loadCustom = async () => { custom = await S.list('exercises'); };
 export const exById = id => all().find(x => x.id === id);
 export const exName = id => all().find(x => x.id === id)?.name || id;
 
@@ -68,12 +70,14 @@ export async function exercisesView(v) {
     const d = sheet(`<h3>${esc(x.name)}</h3><p class="muted">${esc(x.equipment)} · ${esc(TYPES[x.type])}</p>
       <p><b>Primary:</b> ${esc(x.primary)}<br><b>Secondary:</b> ${esc(x.secondary.join(', ') || 'none')}</p>
       ${x.note ? `<p>${esc(x.note)}</p>` : ''}
-      ${x.builtin ? '<p class="muted">Built-in exercise. History and records appear here once you log workouts.</p>'
+      <button class="btn2" data-d="more">Technique, records and charts</button>
+      ${x.builtin ? ''
         : '<div class="row"><button data-d="del" class="danger">Delete</button><button data-d="edit" class="btn">Edit</button></div>'}`);
     d.onclick = async ev => {
       const a = ev.target.dataset.d; if (!a) return;
       d.close();
-      if (a === 'edit') form(x, reload);
+      if (a === 'more') exerciseDetail(x);
+      else if (a === 'edit') form(x, reload);
       else if (confirm('Delete this exercise? Past workouts keep their data.')) { await S.del('exercises/' + x.id); reload(); }
     };
   };

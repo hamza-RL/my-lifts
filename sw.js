@@ -1,7 +1,7 @@
 // Change VERSION on every release: it triggers the "update available" banner and refreshes the cache.
-const VERSION = '1.2.2';
+const VERSION = '1.3.0';
 const CACHE = 'mylifts-' + VERSION, CDN = 'mylifts-cdn';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'firebase-config.js', 'manifest.json',
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'stats.js', 'firebase-config.js', 'manifest.json',
   'icon-192.png', 'icon-512.png', 'icon-maskable.png'];
 
 self.addEventListener('install', e => e.waitUntil(
@@ -25,7 +25,7 @@ self.addEventListener('fetch', e => {
       return;
     }
     e.respondWith(caches.match(r, { ignoreSearch: true }).then(c => c || fetch(r).catch(() => caches.match('./'))));
-  } else if (u.hostname === 'www.gstatic.com') { // Firebase SDK: cache so the app opens offline
+  } else if (['www.gstatic.com', 'raw.githubusercontent.com'].includes(u.hostname)) { // Firebase SDK: cache so the app opens offline
     e.respondWith(caches.open(CDN).then(async c => {
       const m = await c.match(r);
       const n = fetch(r).then(x => { c.put(r, x.clone()); return x; }).catch(() => m);
