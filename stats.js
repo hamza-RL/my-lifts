@@ -1,5 +1,6 @@
 import * as S from './store.js';
-import { sheet, esc, exById, exName, loadCustom } from './views.js';
+import { bodyMap } from './body.js';
+import { sheet, esc, exById, exName, loadCustom, pickExercise } from './views.js';
 import { showWorkout } from './workout.js';
 
 const $ = (s, r = document) => r.querySelector(s), DAY = 864e5, TZ = 'Africa/Casablanca';
@@ -17,19 +18,6 @@ export function line(pts, fmt = r1) {
     <text x="4" y="12" class="ct">${fmt(hi)}</text><text x="4" y="${H - 6}" class="ct">${fmt(lo)}</text></svg>`;
 }
 const bars = vals => { const m = Math.max(1, ...vals); return `<div class="bars">${vals.map(n => `<i style="height:${Math.max(4, n / m * 100)}%"><b>${n || ''}</b></i>`).join('')}</div><small class="muted">Last 12 weeks, oldest first</small>`; };
-// [muscle, view, "x y w h", mirrored?]
-const BM = [['shoulders', 'f', '20 28 14 14', 1], ['chest', 'f', '34 32 15 16', 1], ['biceps', 'f', '12 44 10 22', 1], ['forearms', 'f', '8 68 10 24', 1], ['abs', 'f', '38 50 24 34', 0],
-  ['obliques', 'f', '30 52 8 28', 1], ['quads', 'f', '30 90 18 44', 1], ['adductors', 'f', '46 96 4 28', 1], ['calves', 'f', '31 140 12 36', 1],
-  ['traps', 'b', '38 24 24 12', 0], ['shoulders', 'b', '20 28 14 14', 1], ['upper back', 'b', '34 38 32 14', 0], ['lats', 'b', '30 50 10 26', 1], ['lower back', 'b', '40 76 20 12', 0],
-  ['triceps', 'b', '12 44 10 22', 1], ['forearms', 'b', '8 68 10 24', 1], ['glutes', 'b', '32 88 18 16', 1], ['abductors', 'b', '26 90 5 12', 1], ['hamstrings', 'b', '30 106 18 32', 1], ['calves', 'b', '31 140 12 36', 1]];
-export function bodyMap(int) {
-  const fig = v => `<svg viewBox="0 0 100 180" class="bm" role="img" aria-label="${v === 'f' ? 'Front' : 'Back'} muscle map"><circle cx="50" cy="14" r="10" fill="var(--s2)"/>${BM.filter(p => p[1] === v).map(([m, , r, mir]) => {
-    const [x, y, w, h] = r.split(' ').map(Number), a = int[m] || 0, fill = a ? `rgb(255 59 59 / ${.25 + .75 * a})` : 'var(--s2)';
-    const rc = X => `<rect data-m="${m}" x="${X}" y="${y}" width="${w}" height="${h}" rx="4" fill="${fill}"/>`;
-    return rc(x) + (mir ? rc(100 - x - w) : '');
-  }).join('')}</svg>`;
-  return `<div class="bms">${fig('f')}${fig('b')}</div>`;
-}
 
 // ---------- Statistics tab ----------
 export async function statsView(v) {
@@ -59,7 +47,7 @@ export async function statsView(v) {
     const [ty, tm] = dkey(Date.now()).split('-').map(Number), first = new Date(Date.UTC(ty, tm - 1 + mo, 1)), y = first.getUTCFullYear(), m = first.getUTCMonth();
     const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(), lead = (first.getUTCDay() + (cfg.weekStart === 'mon' ? 6 : 0)) % 7, pre = `${y}-${String(m + 1).padStart(2, '0')}`;
     const ma = agg(ws.filter(w => dkey(w.startTs).startsWith(pre)));
-    const topEx = Object.entries(a.ex).sort((p, q) => q[1] - p[1]).slice(0, 5);
+    const topEx = Object.entries(a.ex).sort((p, q) => q[1] - p[1]).slice(0, 8);
     v.innerHTML = `<header class="top"><h1>Statistics</h1></header>
       <div class="chips" id="rg">${[[30, '30 days'], [90, '3 months'], [365, 'Year'], [1e5, 'All time']].map(([d, l]) => `<button class="chip${d === days ? ' on' : ''}" data-d="${d}">${l}</button>`).join('')}</div>
       <div class="card grid"><div><b>${a.n}</b><small>Workouts</small></div><div><b>${Math.round(a.dur)}</b><small>Minutes</small></div><div><b>${Math.round(a.vol)}</b><small>Volume (${cfg.weightUnit})</small></div>
@@ -68,14 +56,16 @@ export async function statsView(v) {
       <h2>Workouts per week</h2><div class="card">${bars(last.map(k => wk[k]?.n || 0))}</div>
       <h2>Weekly volume</h2><div class="card">${line(last.filter(k => wk[k]).map(k => ({ x: k, y: wk[k].vol })), n => Math.round(n))}</div>
       <h2>Muscle distribution (sets)</h2><div class="card">${mus.length ? mus.map(([k, n]) => `<div class="mb"><span>${esc(k)}</span><i style="--w:${n / top * 100}%"></i><b>${r1(n)}</b></div>`).join('') + '<p class="muted"><small>Primary muscle counts fully, secondary muscles count half.</small></p>' : '<p class="muted">Log a workout to see this.</p>'}</div>
-      <h2>Most logged</h2><div class="card">${topEx.map(([id, n]) => `<div class="mb"><span>${esc(exName(id))}</span><i style="--w:${n / topEx[0][1] * 100}%"></i><b>${n}</b></div>`).join('') || '<p class="muted">Nothing yet.</p>'}</div>
+      <h2>Exercise progress (tap one)</h2><div class="card">${topEx.map(([id, n]) => `<button class="mb mbb" data-ex="${esc(id)}"><span>${esc(exName(id))}</span><i style="--w:${n / topEx[0][1] * 100}%"></i><b>${n}</b></button>`).join('') || '<p class="muted">Nothing yet.</p>'}<button class="btn2" data-pickex>Pick any exercise</button></div>
       <h2>Calendar</h2><div class="card"><div class="row cal-h"><button data-mo="-1" aria-label="Previous month">‹</button><b>${first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</b><button data-mo="1" aria-label="Next month">›</button></div>
         <div class="cal">${(cfg.weekStart === 'mon' ? 'MTWTFSS' : 'SMTWTFS').split('').map(h => `<span class="muted">${h}</span>`).join('')}${'<span></span>'.repeat(lead)}${Array.from({ length: dim }, (_, i) => { const k = `${pre}-${String(i + 1).padStart(2, '0')}`; return `<button class="cd${byDay[k] ? ' on' : ''}" data-day="${k}">${i + 1}</button>`; }).join('')}</div>
         <p><b>Month report:</b> ${ma.n} workouts · ${ma.sets} sets · ${Math.round(ma.vol)} ${cfg.weightUnit} · ${Math.round(ma.dur)} min</p></div>`;
   };
   draw();
-  v.onclick = e => {
+  v.onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.ex) return exerciseDetail(exById(b.dataset.ex), 'cha');
+    if ('pickex' in b.dataset) { const id = await pickExercise(); if (id) exerciseDetail(exById(id), 'cha'); return; }
     if (b.dataset.d) { days = +b.dataset.d; draw(); }
     else if (b.dataset.mo) { mo += +b.dataset.mo; draw(); }
     else if (b.dataset.day) {
@@ -102,9 +92,18 @@ function rate(x) {
   const comp = x.secondary.length >= 1 && ['wr', 'br', 'wb', 'ab'].includes(x.type), free = ['Barbell', 'Dumbbell', 'Smith machine'].includes(x.equipment);
   return [comp ? (free ? 5 : 4) : 3, comp ? (x.equipment === 'Barbell' ? 5 : free ? 4 : 3) : 2];
 }
-export async function exerciseDetail(x) {
-  const st = (await S.get('exerciseStats/' + x.id)) || {}, hist = [...(st.history || [])].sort((a, b) => a.date - b.date), rec = st.records || {}, cfg = await S.getSettings();
-  let tab = 'sum', metric = 'topWeight', rng = 1e5;
+export async function exerciseDetail(x, start) {
+// History and records are computed from your workouts, so they are always accurate (even after edits or deletes).
+  const cfg = await S.getSettings(), ws = (await S.list('workouts')).sort((a, b) => a.startTs - b.startTs), hist = [], rec = {}, best = {};
+  ws.forEach(w => {
+    const xs = w.exercises.filter(e => e.exerciseId === x.id); if (!xs.length) return;
+    const cs = xs.flatMap(e => e.sets).filter(s => s.type !== 'warmup' || cfg.warmupInStats), top = Math.max(0, ...cs.map(s => s.weight || 0)), e1 = Math.max(0, ...cs.map(s => (s.weight || 0) * (1 + (s.reps || 0) / 30)));
+    const vol = cs.reduce((q, s) => q + (s.weight || 0) * (s.reps || 0), 0), reps = cs.reduce((q, s) => q + (s.reps || 0), 0);
+    hist.push({ workoutId: w.id, date: w.startTs, topWeight: top, e1RM: r1(e1), volume: Math.round(vol), reps });
+    rec.heaviest = Math.max(rec.heaviest || 0, top); rec.best1RM = Math.max(rec.best1RM || 0, r1(e1)); rec.bestSessionVolume = Math.max(rec.bestSessionVolume || 0, vol);
+    cs.forEach(s => { rec.maxReps = Math.max(rec.maxReps || 0, s.reps || 0); rec.bestSetVolume = Math.max(rec.bestSetVolume || 0, (s.weight || 0) * (s.reps || 0)); if (s.reps && s.weight) best[s.reps] = Math.max(best[s.reps] || 0, s.weight); });
+  });
+  let tab = start || (hist.length > 1 ? 'cha' : 'sum'), metric = rec.heaviest ? 'topWeight' : 'reps', rng = 1e5;
   const d = sheet(`<h3>${esc(x.name)}</h3><div class="seg s4">${[['sum', 'Summary'], ['his', 'History'], ['cha', 'Charts'], ['rec', 'Records']].map(([k, l]) => `<button data-t="${k}">${l}</button>`).join('')}</div><div id="tb"></div>`);
   const u = cfg.weightUnit, dt = t => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ });
   const render = async () => {
@@ -114,7 +113,7 @@ export async function exerciseDetail(x) {
       const [m, s] = rate(x), int = { [x.primary]: 1 }; x.secondary.forEach(k => int[k] = .5);
       tb.innerHTML = `<div class="demo" id="dm"><p class="muted">Loading demo…</p></div>${bodyMap(int)}
         <p>Muscle building <b>${stars(m)}</b><br>Strength <b>${stars(s)}</b><br><small class="muted">My rule-based estimate (compound, free weight), not a research score.</small></p>
-        <p class="muted">${hist.length} sessions${hist.length ? ' · last ' + dt(hist[hist.length - 1].date) : ''}</p><div id="ins"></div>`;
+        <p class="muted">${hist.length} sessions${hist.length ? ' · last ' + dt(hist[hist.length - 1].date) : ''}</p><div id="ins"></div>${x.builtin ? '' : '<div class="row"><button data-ed="del" class="danger">Delete exercise</button><button data-ed="edit" class="btn">Edit exercise</button></div>'}`;
       demoFor(x).then(e => {
         if (!$('#dm', d)) return;
         if (!e) { $('#dm', d).innerHTML = '<p class="muted">No demo available for this exercise.</p>'; return; }
@@ -126,18 +125,17 @@ export async function exerciseDetail(x) {
     } else if (tab === 'cha') {
       const pts = hist.filter(h => h.date >= Date.now() - rng * DAY).map(h => ({ x: h.date, y: h[metric], id: h.workoutId }));
       tb.innerHTML = `<div class="chips">${[['topWeight', 'Heaviest'], ['e1RM', 'Est. 1RM'], ['volume', 'Volume'], ['reps', 'Total reps']].map(([k, l]) => `<button class="chip${k === metric ? ' on' : ''}" data-mt="${k}">${l}</button>`).join('')}</div>
-        <div class="chips">${[[30, '1M'], [90, '3M'], [180, '6M'], [365, '1Y'], [1e5, 'All']].map(([k, l]) => `<button class="chip${k === rng ? ' on' : ''}" data-rg="${k}">${l}</button>`).join('')}</div>${line(pts)}<small class="muted">Tap a point to open that workout.</small>`;
+        <div class="chips">${[[30, '1M'], [90, '3M'], [180, '6M'], [365, '1Y'], [1e5, 'All']].map(([k, l]) => `<button class="chip${k === rng ? ' on' : ''}" data-rg="${k}">${l}</button>`).join('')}</div>${pts.length > 1 ? `<p><b>${r1(pts[0].y)} → ${r1(pts[pts.length - 1].y)}</b> (${pts[pts.length - 1].y >= pts[0].y ? '+' : ''}${r1(pts[pts.length - 1].y - pts[0].y)}${pts[0].y ? `, ${r1((pts[pts.length - 1].y / pts[0].y - 1) * 100)}%` : ''}) over ${pts.length} sessions</p>` : ''}${line(pts)}<small class="muted">Tap a point to open that workout.</small>`;
     } else {
-      const best = {};
-      (await S.list('workouts')).forEach(w => w.exercises.filter(e => e.exerciseId === x.id).forEach(e => e.sets.forEach(s => { if (s.reps && s.weight && (s.type !== 'warmup' || cfg.warmupInStats)) best[s.reps] = Math.max(best[s.reps] || 0, s.weight); })));
       const row = (l, n, f = r1) => `<tr><td>${l}</td><td>${n ? f(n) : '–'}</td></tr>`;
       tb.innerHTML = `<table class="rt2">${row('Heaviest weight (' + u + ')', rec.heaviest)}${row('Best estimated 1RM', rec.best1RM)}${row('Best set volume', rec.bestSetVolume)}${row('Best session volume', rec.bestSessionVolume)}${row('Most reps in a set', rec.maxReps)}</table>
         <h4>Best weight by reps</h4><table class="rt2">${Object.keys(best).sort((a, b) => a - b).map(k => `<tr><td>${k} reps</td><td>${best[k]} ${u}</td></tr>`).join('') || '<tr><td>No sets yet</td><td></td></tr>'}</table>`;
     }
   };
   d.onclick = e => {
-    const b = e.target.closest('[data-t],[data-mt],[data-rg],[data-h],circle[data-w]'); if (!b) return;
+    const b = e.target.closest('[data-t],[data-mt],[data-rg],[data-h],[data-ed],circle[data-w]'); if (!b) return;
     const ds = b.dataset;
+    if (ds.ed) { d.close(); import('./views.js').then(m => (ds.ed === 'edit' ? m.editExercise(x) : m.deleteExercise(x))); return; }
     if (ds.t) tab = ds.t; else if (ds.mt) metric = ds.mt; else if (ds.rg) rng = +ds.rg;
     else { const id = ds.h || ds.w; if (id) showWorkout(id, () => {}); return; }
     render();

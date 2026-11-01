@@ -1,5 +1,6 @@
 import * as S from './store.js';
 import { hasActive, historyHtml, showWorkout, importStart } from './workout.js';
+import { homeView } from './home.js';
 import { foodView } from './food.js';
 import { loadDemo, removeDemo } from './demo.js';
 import { statsView } from './stats.js';
@@ -36,7 +37,7 @@ const TABS = [['home', IC('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10'), 'Home'], ['wor
   ['exercises', IC('M4 6h16M4 12h16M4 18h10'), 'Exercises'], ['food', IC('M7 3v8M11 3v8M7 7h4M9 11v10M17 3c-2 2-2 8 0 9v9'), 'Food'],
   ['profile', IC('M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-6 8-6s8 2 8 6'), 'Profile']];
 const soon = (t, p) => v => { v.innerHTML = `<h1>${t}</h1><div class="card">Coming in ${p}.</div>`; };
-const views = { home, workout: workoutView, exercises: exercisesView, stats: statsView, food: foodView, profile };
+const views = { home: homeView, workout: workoutView, exercises: exercisesView, stats: statsView, food: foodView, profile };
 
 function toast(m) {
   let t = $('#toast');
@@ -104,16 +105,6 @@ addEventListener('hashchange', route);
 addEventListener('toast', e => toast(e.detail));
 addEventListener('store-error', e => toast(S.errMsg(e.detail)));
 
-async function home(v) {
-  const d = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: settings.timezone });
-  let h = `<h1>My Lifts</h1><p class="muted">${esc(d)}</p>`;
-  if (await hasActive()) h += '<a class="card resume" href="#/workout"><b>Workout in progress</b><br><span class="muted">Tap to resume</span></a>';
-  if (!S.cloudConfigured) h += `<div class="card warn"><b>Demo mode</b><p>Your data stays on this device. Add your Firebase config in <code>firebase-config.js</code> to sync across devices.</p></div>`;
-  else if (await S.localCount()) h += `<div class="card warn"><b>Data found on this device</b><p>Upload your demo data to your account?</p><button class="btn" data-a="upload">Upload my local data</button></div>`;
-  v.innerHTML = h + `<div class="card"><b>Get started</b><p class="muted">Pick a routine on the Workout tab.</p></div>` + await historyHtml();
-  v.onclick = e => { const b = e.target.closest('[data-h]'); if (b) showWorkout(b.dataset.h, route); };
-}
-
 async function profile(v) {
   const u = S.user();
   const field = ([k, l, t, o]) => `<label class="${t === 'check' ? 'chk' : ''}"><span>${esc(l)}</span>` + (t === 'select'
@@ -132,7 +123,7 @@ async function profile(v) {
     const el = e.target, k = el.dataset.k; if (!k) return;
     const t = FIELDS.find(f => f[0] === k)[2];
     settings[k] = t === 'check' ? el.checked : t === 'num' ? (parseFloat(el.value) || 0) : el.value;
-    await S.saveSettings(settings);
+    settings = await S.patchSettings({ [k]: settings[k] });
     if (k === 'theme') applyTheme();
     toast('Saved');
   };

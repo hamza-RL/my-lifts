@@ -91,3 +91,16 @@ ol{padding-left:20px}
 .mb2{display:grid;grid-template-columns:70px 1fr auto;gap:2px 10px;align-items:center;margin:10px 0}.mb2 small{grid-column:2/4;color:var(--mut);margin-top:-2px}.mb2 b{font-size:.9rem}
 .pb{height:10px;border-radius:5px;background:var(--s2);overflow:hidden}.pb i{display:block;height:100%;width:var(--w);background:var(--acc)}.pb.over i{background:var(--warn)}
 textarea{width:100%}
+.mbb{width:100%;background:transparent;border:0;min-height:44px;padding:0;text-align:left;font-weight:400;border-radius:0}
+.link{background:none;border:0;padding:0;min-height:44px;font-size:1.1rem;font-weight:700;color:var(--text);text-align:left}
+.sb{position:relative}.sb h3{padding-right:44px}.x{position:absolute;top:10px;right:12px;width:40px;min-height:40px;padding:0;border-radius:50%;background:var(--s2);font-size:1rem}
+a.card{display:block;text-decoration:none;color:var(--text)}
+.next{border-color:var(--acc)}.next b{display:block;font-size:1.4rem}.next h2{margin:.1em 0 .3em;font-size:1.5rem}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;min-height:64px;text-align:left;background:var(--s1);border-radius:16px}.tile small{color:var(--mut);font-weight:400;font-size:.8rem}
+.rl2{display:flex;justify-content:space-between;gap:12px;margin:.4em 0}
+.ringrow{display:flex;align-items:center;gap:16px;margin:8px 0}.ring{width:150px;height:150px;flex:none}.rn{font-size:26px;font-weight:800;fill:var(--text)}.rl{font-size:9px;fill:var(--mut)}
+.rside{flex:1}.rside b{font-size:1.8rem}.tgl{display:block;text-align:center;text-decoration:none;padding:12px;margin-top:6px;border-radius:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.stat{background:var(--s1);border:1px solid var(--line);border-radius:18px;padding:14px}.stat b{display:block;font-size:1.5rem}.stat small{color:var(--mut)}
+.big2{font-size:1.8rem;font-weight:800;margin:.2em 0}
+.bf{margin:0;flex:1;max-width:170px;text-align:center}.bf figcaption{color:var(--mut);font-size:.8rem}.bm{width:100%;height:auto;max-height:340px}

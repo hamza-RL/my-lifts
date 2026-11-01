@@ -1,6 +1,6 @@
 import * as S from './store.js';
 import { exerciseDetail } from './stats.js';
-import { hasActive, liveView, startWorkout } from './workout.js';
+import { hasActive, liveView, startWorkout, nextRoutine } from './workout.js';
 import { SEED, SEED_ROUTINES, MUSCLES, EQUIP, TYPES, slug } from './data.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -30,10 +30,10 @@ export async function seedOnce() {
 
 export function sheet(html) {
   const d = document.createElement('dialog');
-  d.className = 'sheet'; d.innerHTML = `<div class="sb">${html}</div>`;
+  d.className = 'sheet'; d.innerHTML = `<div class="sb"><button class="x" aria-label="Close">✕</button>${html}</div>`;
   document.body.append(d); d.showModal();
   d.addEventListener('close', () => d.remove());
-  d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  d.addEventListener('click', e => { if (e.target === d || e.target.closest('.x')) d.close(); });
   return d;
 }
 const hue = m => (MUSCLES.indexOf(m) * 47) % 360;
@@ -67,6 +67,7 @@ export async function exercisesView(v) {
     if (e.target.closest('[data-n]')) return form({}, reload);
     const it = e.target.closest('.item'); if (!it) return;
     const x = all().find(y => y.id === it.dataset.id);
+    return exerciseDetail(x);
     const d = sheet(`<h3>${esc(x.name)}</h3><p class="muted">${esc(x.equipment)} · ${esc(TYPES[x.type])}</p>
       <p><b>Primary:</b> ${esc(x.primary)}<br><b>Secondary:</b> ${esc(x.secondary.join(', ') || 'none')}</p>
       ${x.note ? `<p>${esc(x.note)}</p>` : ''}
@@ -108,24 +109,32 @@ function form(x, done) {
 // ---------- Workout tab: routines ----------
 export async function workoutView(v) {
   if (await hasActive()) return liveView(v);
-  custom = await S.list('exercises');
-  const rs = (await S.list('routines')).sort((a, b) => a.order - b.order);
+  await loadCustom();
+  const [r0, ws, plan] = await Promise.all([S.list('routines'), S.list('workouts'), S.get('meta/plan')]), rs = r0.sort((a, b) => a.order - b.order), next = nextRoutine(rs, ws, plan);
+  const rng = s => (s?.repsMin ? (s.repsMin === s.repsMax ? s.repsMin : s.repsMin + '–' + s.repsMax) : '–');
   v.innerHTML = `<header class="top"><h1>Workout</h1></header>
-    <button class="btn big" data-w="start">Start empty workout</button><h2>My routines</h2>
-    ${rs.map(r => `<article class="card rt"><div class="rh"><b>${esc(r.title)}</b><button class="icon" data-m="${esc(r.id)}" aria-label="Actions for ${esc(r.title)}">⋯</button></div>
-      <p class="muted">${r.exercises.length} exercises · ${r.exercises.reduce((n, e) => n + e.sets.length, 0)} sets</p>
-      <p class="prev">${esc(r.exercises.map(e => exName(e.exerciseId)).join(', '))}</p>
-      <button class="btn" data-w="start" data-id="${esc(r.id)}">Start routine</button></article>`).join('') || '<p class="muted">No routines yet.</p>'}`;
+    ${next ? `<div class="card next"><small class="muted">Up next</small><h2>${esc(next.title)}</h2><p class="prev">${esc(next.exercises.map(e => exName(e.exerciseId)).join(', '))}</p>
+      <div class="row"><button data-w="change">Change</button><button class="btn" data-w="start" data-id="${esc(next.id)}">Start ${esc(next.title)}</button></div></div>` : ''}
+    <button class="btn2" data-w="start">Start empty workout</button><h2>My routines</h2>
+    <div class="tiles">${rs.map(r => `<button class="tile" data-r="${esc(r.id)}"><b>${esc(r.title)}</b><small>${r.exercises.length} exercises · ${r.exercises.reduce((n, e) => n + e.sets.length, 0)} sets</small></button>`).join('') || '<p class="muted">No routines yet.</p>'}</div>`;
+  const go = async r => { await startWorkout(r || null); workoutView(v); };
   v.onclick = async e => {
-    const sb = e.target.closest('[data-w]');
-    if (sb) { await startWorkout(rs.find(x => x.id === sb.dataset.id) || null); return workoutView(v); }
-    const m = e.target.closest('[data-m]'); if (!m) return;
-    const r = rs.find(x => x.id === m.dataset.m);
-    const d = sheet(`<h3>${esc(r.title)}</h3><button class="btn2" data-a="dup">Duplicate</button><button class="btn2 danger" data-a="del">Delete</button>`);
+    const w = e.target.closest('[data-w]'), t = e.target.closest('[data-r]');
+    if (w?.dataset.w === 'start') return go(rs.find(x => x.id === w.dataset.id));
+    if (w?.dataset.w === 'change') {
+      const d = sheet(`<h3>Set what is up next</h3>${rs.map(r => `<button class="item" data-p="${esc(r.id)}"><b>${esc(r.title)}</b></button>`).join('')}`);
+      d.onclick = async ev => { const p = ev.target.closest('[data-p]'); if (!p) return; await S.set('meta/plan', { nextId: p.dataset.p, updatedAt: Date.now() }); d.close(); workoutView(v); };
+      return;
+    }
+    if (!t) return;
+    const r = rs.find(x => x.id === t.dataset.r);
+    const d = sheet(`<h3>${esc(r.title)}</h3>${r.exercises.map(x => `<p class="rl2"><span>${esc(exName(x.exerciseId))}</span><span class="muted">${x.sets.length} × ${rng(x.sets[0])}</span></p>`).join('')}
+      <button class="btn big" data-a="start">Start ${esc(r.title)}</button><div class="row"><button data-a="dup">Duplicate</button><button data-a="del" class="danger">Delete</button></div>`);
     d.onclick = async ev => {
       const a = ev.target.dataset.a; if (!a) return;
       if (a === 'del' && !confirm('Delete this routine?')) return;
       d.close();
+      if (a === 'start') return go(r);
       if (a === 'dup') await S.set('routines/r_' + Date.now().toString(36), { ...Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'id')), title: r.title + ' copy', order: rs.length, updatedAt: Date.now() });
       else await S.del('routines/' + r.id);
       workoutView(v);
@@ -144,4 +153,9 @@ export function pickExercise() {
     d.onclick = e => { const i = e.target.closest('.item'); if (i) { pick = i.dataset.id; d.close(); } };
     d.addEventListener('close', () => res(pick));
   });
+}
+
+export const editExercise = x => form(x, () => exercisesView($('#view')));
+export async function deleteExercise(x) {
+  if (confirm('Delete this exercise? Past workouts keep their data.')) { await S.del('exercises/' + x.id); exercisesView($('#view')); }
 }

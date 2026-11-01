@@ -1,5 +1,6 @@
 import * as S from './store.js';
 import { slug } from './data.js';
+import { exerciseDetail } from './stats.js';
 import { exById, pickExercise, sheet, esc, toast, exName } from './views.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -18,6 +19,12 @@ const fmtT = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2
 
 // After saving or discarding, stay on the Workout tab (re-render it even if the hash is already #/workout).
 const goWorkout = () => (location.hash === '#/workout' ? dispatchEvent(new Event('hashchange')) : (location.hash = '#/workout'));
+export function nextRoutine(rs, ws, plan) { // the routine after the last one you finished; stays until you finish one
+  if (!rs.length) return null;
+  const set = plan?.nextId && rs.find(r => r.id === plan.nextId); if (set) return set;
+  const last = [...ws].filter(w => w.routineId && rs.some(r => r.id === w.routineId)).sort((a, b) => b.startTs - a.startTs)[0];
+  return last ? rs[(rs.findIndex(r => r.id === last.routineId) + 1) % rs.length] : rs[0];
+}
 export const hasActive = async () => !!(W || (await S.get('activeWorkout/current')));
 
 export async function startWorkout(routine) {
@@ -77,7 +84,7 @@ function draw(v) {
   v.innerHTML = `<header class="top live"><div><input id="wt" class="ttl" maxlength="60" aria-label="Workout title" value="${esc(W.title)}"><small id="dur" class="muted"></small></div>
     <button class="btn fin" data-l="fin">Finish</button></header>
     ${W.exercises.map((x, i) => { const e = exById(x.exerciseId), t = e?.type || 'wr'; return `<section class="card ex" data-i="${i}">
-      <div class="rh"><b>${esc(e?.name || x.exerciseId)}</b><button class="icon" data-l="exm" aria-label="Exercise menu">⋯</button></div>
+      <div class="rh"><button class="link" data-l="info">${esc(e?.name || x.exerciseId)}</button><button class="icon" data-l="exm" aria-label="Exercise menu">⋯</button></div>
       <textarea data-k="notes" rows="1" placeholder="Notes" aria-label="Notes">${esc(x.notes)}</textarea>
       <div class="sr hd" style="--n:${(COLS[t] || COLS.wr).length}"><span>Set</span><span>Previous</span>${(COLS[t] || COLS.wr).map(f => `<span>${HEAD[f]}</span>`).join('')}<span></span></div>
       ${x.sets.map((s, j) => row(x, i, s, j, t)).join('')}
@@ -106,6 +113,7 @@ export async function liveView(v) {
   v.onclick = async e => {
     const b = e.target.closest('[data-l]'); if (!b) return;
     const l = b.dataset.l, [x, i, j] = at(b), t = x && (exById(x.exerciseId)?.type || 'wr');
+    if (l === 'info') return exerciseDetail(exById(x.exerciseId), 'cha');
     if (l === 'ck') {
       const s = x.sets[j]; s.done = !s.done;
       if (s.done) {
@@ -180,6 +188,7 @@ async function finish(v) {
     } else if (!routine && $('#sr', d)?.checked) {
       S.set('routines/r_' + Date.now().toString(36), { title: w.title, order: 99, folderId: null, updatedAt: Date.now(), exercises: done.map(x => ({ exerciseId: x.exerciseId, restSec: x.restSec, notes: '', supersetId: null, sets: x.sets.map(s => ({ type: s.type, weight: s.weight, repsMin: s.reps, repsMax: s.reps })) })) });
     }
+    if (w.routineId) { const rs = (await S.list('routines')).sort((a, b) => a.order - b.order), i = rs.findIndex(r => r.id === w.routineId); if (i >= 0) S.set('meta/plan', { nextId: rs[(i + 1) % rs.length].id, updatedAt: Date.now() }); }
     W = null; ST = {}; await S.del('activeWorkout/current'); d.close();
     toast(prs.length ? 'Saved. New PR: ' + prs.slice(0, 2).join(', ') : 'Workout saved.'); goWorkout();
   };

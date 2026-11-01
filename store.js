@@ -96,6 +96,8 @@ export async function ensureSchema() {
 }
 export const getSettings = async () => ({ ...DEFAULT_SETTINGS, ...((await get('settings/main')) || {}) });
 export const saveSettings = s => set('settings/main', s);
+// Saves only the keys you pass (never overwrites other settings with stale values).
+export async function patchSettings(p) { const n = { ...(await getSettings()), ...p }; await set('settings/main', n); return n; }
 
 // ---------- Backup and demo-to-cloud upload ----------
 export async function exportAll() {

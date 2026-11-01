@@ -46,7 +46,7 @@ async function diary(el) {
   const T = train ? { k: cfg.kcalTrain, p: cfg.proteinTrain, c: cfg.carbsTrain, f: cfg.fatTrain } : { k: cfg.kcalRest, p: cfg.proteinRest, c: cfg.carbsRest, f: cfg.fatRest };
   const all = sum(day.slots.flatMap(s => s.items)), wt = (await S.get('measurements/' + date))?.fields?.weight ?? '';
   el.innerHTML = `<div class="row cal-h"><button data-sh="-1" aria-label="Previous day">‹</button><b>${new Date(date + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}${date === today() ? ' (today)' : ''}</b><button data-sh="1" aria-label="Next day">›</button></div>
-    <div class="card"><p class="muted">${train ? 'Training day' : 'Rest day'} targets</p>${bar('Calories', all.k, T.k)}${bar('Protein', all.p, T.p, ' g')}${bar('Carbs', all.c, T.c, ' g')}${bar('Fat', all.f, T.f, ' g')}</div>
+    <div class="card"><div class="rh"><b>${train ? 'Training day' : 'Rest day'} targets</b><button class="chip on" data-f="tg">Edit targets</button></div>${!T.k && !T.p ? '<p class="err">No target set yet. Tap Edit targets to enter your daily calories and protein.</p>' : ''}${bar('Calories', all.k, T.k)}${bar('Protein', all.p, T.p, ' g')}${bar('Carbs', all.c, T.c, ' g')}${bar('Fat', all.f, T.f, ' g')}</div>
     ${day.slots.map((s, si) => `<section class="card"><div class="rh"><b>${esc(s.name)}</b><span><b>${Math.round(sum(s.items).k)}</b> kcal <button class="icon" data-sm="${si}" aria-label="Meal menu">⋯</button></span></div>
       ${s.items.map((i, ii) => `<button class="item" data-e="${si}:${ii}"><span><b>${esc(i.n)}</b><small>${esc(i.label)} · ${i.p}P ${i.c}C ${i.f}F</small></span><b>${i.k}</b></button>`).join('')}
       <button class="btn2" data-add="${si}">+ Add food</button></section>`).join('') || '<p class="muted">Nothing logged yet. Add a meal slot below, or tap Quick snack.</p>'}
@@ -175,14 +175,15 @@ function foodForm(f) {
   });
 }
 function targets() {
-  const rows = [['Calories', 'kcal'], ['Protein (g)', 'protein'], ['Carbs (g)', 'carbs'], ['Fat (g)', 'fat']];
-  const dlg = sheet(`<h3>Daily targets</h3><form method="dialog"><div class="row"><b>Training day</b><b>Rest day</b></div>${rows.map(([l, k]) => `<label>${l}<span class="row"><input name="${k}Train" inputmode="numeric" value="${cfg[k + 'Train']}"><input name="${k}Rest" inputmode="numeric" value="${cfg[k + 'Rest']}"></span></label>`).join('')}
+  const sec = (title, s) => `<fieldset><legend><b>${title}</b></legend>${[['kcal', 'Calories (kcal)'], ['protein', 'Protein (g)'], ['carbs', 'Carbs (g), optional'], ['fat', 'Fat (g), optional']].map(([k, l]) => `<label>${l}<input name="${k}${s}" inputmode="numeric" value="${cfg[k + s] || ''}" placeholder="0"></label>`).join('')}</fieldset>`;
+  const dlg = sheet(`<h3>Daily targets</h3><p class="muted">A training day is a day you log a workout. Every other day uses the rest-day targets.</p><form method="dialog">${sec('Training day', 'Train')}${sec('Rest day', 'Rest')}
     <label>Moroccan spoon (m3l9a) in grams of honey<input name="spoonG" inputmode="decimal" value="${cfg.spoonG}"></label><label>Glass size (ml)<input name="glassMl" inputmode="numeric" value="${cfg.glassMl}"></label>
-    <div class="row"><button value="x" formnovalidate>Cancel</button><button value="ok" class="btn">Save</button></div></form>`);
+    <div class="row"><button value="x" formnovalidate>Cancel</button><button value="ok" class="btn">Save targets</button></div></form>`);
   dlg.addEventListener('close', async () => {
-    if (dlg.returnValue !== 'ok') return; const x = new FormData(dlg.querySelector('form'));
-    for (const [k, v] of x) cfg[k] = parseFloat(v) || 0; if (!cfg.spoonG) cfg.spoonG = 12; if (!cfg.glassMl) cfg.glassMl = 250;
-    await S.saveSettings(cfg); render();
+    if (dlg.returnValue !== 'ok') return; const patch = {};
+    for (const [k, v] of new FormData(dlg.querySelector('form'))) patch[k] = parseFloat(String(v).replace(',', '.')) || 0;
+    if (!patch.spoonG) patch.spoonG = 12; if (!patch.glassMl) patch.glassMl = 250;
+    cfg = await S.patchSettings(patch); toast('Targets saved'); render();
   });
 }
 
