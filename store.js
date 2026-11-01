@@ -60,6 +60,10 @@ export const get = p => be().get(p);
 export const set = (p, d) => be().set(p, d);
 export const del = p => be().del(p);
 export const list = c => be().list(c);
+export async function listRange(c, a, b) { // documents whose id is between a and b (dates), so charts read only what they need
+  if (mode === 'cloud') return (await fb.getDocs(fb.query(cref(c), fb.where(fb.documentId(), '>=', a), fb.where(fb.documentId(), '<=', b)))).docs.map(d => ({ id: d.id, ...d.data() }));
+  return (await local.list(c)).filter(d => d.id >= a && d.id <= b);
+}
 export const user = () => auth?.currentUser || null;
 
 export async function watchAuth(cb) {

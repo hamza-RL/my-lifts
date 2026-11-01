@@ -8,7 +8,7 @@ const r1 = n => Math.round(n * 10) / 10;
 const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
 
 // ---------- Charts and body map (own SVG, no libraries) ----------
-function line(pts, fmt = r1) {
+export function line(pts, fmt = r1) {
   if (pts.length < 2) return '<p class="muted">Not enough data yet. Log this a couple more times.</p>';
   const W = 320, H = 150, p = 26, xs = pts.map(q => q.x), mn = Math.min(...xs), mx = Math.max(...xs), ys = pts.map(q => q.y), lo = Math.min(...ys), hi = Math.max(...ys);
   const X = t => p + (mx === mn ? 0 : (t - mn) / (mx - mn)) * (W - 2 * p), Y = y => H - p - (hi === lo ? .5 : (y - lo) / (hi - lo)) * (H - 2 * p);

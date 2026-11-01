@@ -1,5 +1,7 @@
 import * as S from './store.js';
 import { hasActive, historyHtml, showWorkout, importStart } from './workout.js';
+import { foodView } from './food.js';
+import { loadDemo, removeDemo } from './demo.js';
 import { statsView } from './stats.js';
 import { seedOnce, exercisesView, workoutView } from './views.js';
 
@@ -34,7 +36,7 @@ const TABS = [['home', IC('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10'), 'Home'], ['wor
   ['exercises', IC('M4 6h16M4 12h16M4 18h10'), 'Exercises'], ['food', IC('M7 3v8M11 3v8M7 7h4M9 11v10M17 3c-2 2-2 8 0 9v9'), 'Food'],
   ['profile', IC('M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-6 8-6s8 2 8 6'), 'Profile']];
 const soon = (t, p) => v => { v.innerHTML = `<h1>${t}</h1><div class="card">Coming in ${p}.</div>`; };
-const views = { home, workout: workoutView, exercises: exercisesView, stats: statsView, food: soon('Nutrition', 'its own phase after Phase 2'), profile };
+const views = { home, workout: workoutView, exercises: exercisesView, stats: statsView, food: foodView, profile };
 
 function toast(m) {
   let t = $('#toast');
@@ -123,7 +125,7 @@ async function profile(v) {
       <button class="btn2" data-a="email">Change email</button><button class="btn2" data-a="pw">Change password</button>
       <button class="btn2" data-a="out">Sign out</button><button class="btn2 danger" data-a="del">Delete account and all data</button>`
       : '<p class="muted">Demo mode: no account yet.</p>'}</div>
-    <h2>Data</h2><div class="card"><button class="btn2" data-a="backup">Download JSON backup</button><button class="btn2" data-a="seed">Import my starting numbers</button></div>
+    <h2>Data</h2><div class="card"><button class="btn2" data-a="backup">Download JSON backup</button><button class="btn2" data-a="seed">Import my starting numbers</button><button class="btn2" data-a="demo">Load a year of demo data</button><button class="btn2 danger" data-a="undemo">Delete demo data</button></div>
     <h2>About</h2><div class="card"><p>App version: <b id="ver">${esc(version)}</b><br>Data schema version: <b>${S.SCHEMA_VERSION}</b><br>
       Mode: ${S.cloudConfigured ? 'Cloud sync' : 'Demo (this device only)'}</p><button class="btn2" data-a="check">Check for updates</button></div>`;
   $('#sf').onchange = async e => {
@@ -144,6 +146,8 @@ document.addEventListener('click', async e => {
     else if (k === 'check') { await reg?.update(); toast('You are up to date, or an update banner will appear.'); }
     else if (k === 'upd') { refreshing = true; reg.waiting?.postMessage('skip'); }
     else if (k === 'seed') toast(`Imported ${await importStart()} exercises`);
+    else if (k === 'demo') { if (confirm('Add a year of fake workouts, food and weigh-ins? They are tagged as demo and can be deleted in one tap.')) { toast('Creating demo data…'); const r = await loadDemo(); toast(`Added ${r.workouts} workouts, ${r.foodDays} food days, ${r.weighIns} weigh-ins.`); } }
+    else if (k === 'undemo') { if (confirm('Delete ONLY the demo data? Your real data stays.')) { toast('Deleting…'); const r = await removeDemo(); toast(`Deleted ${Object.values(r).reduce((x, y) => x + y, 0)} demo items.`); } }
     else if (k === 'out') await S.logOut();
     else if (k === 'upload') {
       if (confirm('Upload local data to your account and clear the local copy?')) { toast(`Uploaded ${await S.uploadLocal()} items`); route(); }
