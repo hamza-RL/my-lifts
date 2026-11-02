@@ -1,5 +1,7 @@
 import * as S from './store.js';
 import { hasActive, historyHtml, showWorkout, importStart } from './workout.js';
+import { bodyView } from './measure.js';
+import { toolsView } from './tools.js';
 import { homeView } from './home.js';
 import { foodView } from './food.js';
 import { loadDemo, removeDemo } from './demo.js';
@@ -37,7 +39,7 @@ const TABS = [['home', IC('M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10'), 'Home'], ['wor
   ['exercises', IC('M4 6h16M4 12h16M4 18h10'), 'Exercises'], ['food', IC('M7 3v8M11 3v8M7 7h4M9 11v10M17 3c-2 2-2 8 0 9v9'), 'Food'],
   ['profile', IC('M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 4-6 8-6s8 2 8 6'), 'Profile']];
 const soon = (t, p) => v => { v.innerHTML = `<h1>${t}</h1><div class="card">Coming in ${p}.</div>`; };
-const views = { home: homeView, workout: workoutView, exercises: exercisesView, stats: statsView, food: foodView, profile };
+const views = { home: homeView, workout: workoutView, exercises: exercisesView, stats: statsView, body: bodyView, tools: toolsView, food: foodView, profile };
 
 function toast(m) {
   let t = $('#toast');
@@ -97,12 +99,14 @@ function shell() {
 async function route() {
   const v = $('#view'); if (!v) return;
   const k = location.hash.slice(2) || 'home', key = views[k] ? k : 'home';
-  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.k === (key === 'stats' ? 'profile' : key)));
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.k === (['stats', 'body', 'tools'].includes(key) ? 'profile' : key)));
   v.innerHTML = ''; v.onclick = v.oninput = null;
   try { await views[key](v); } catch (e) { v.innerHTML = `<p class="err">${esc(S.errMsg(e))}</p>`; }
 }
 addEventListener('hashchange', route);
 addEventListener('toast', e => toast(e.detail));
+// Never fail silently: show any unexpected save/load error.
+addEventListener('unhandledrejection', e => { console.error(e.reason); toast(S.errMsg(e.reason)); });
 addEventListener('store-error', e => toast(S.errMsg(e.detail)));
 
 async function profile(v) {
@@ -111,7 +115,7 @@ async function profile(v) {
     ? `<select data-k="${k}">${o.map(([a, b]) => `<option value="${a}"${a === settings[k] ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>`
     : t === 'check' ? `<input type="checkbox" data-k="${k}"${settings[k] ? ' checked' : ''}>`
       : `<input type="number" inputmode="decimal" step="any" min="0" data-k="${k}" value="${esc(settings[k])}">`) + '</label>';
-  v.innerHTML = `<h1>Profile</h1><a class="card resume" href="#/stats"><b>Statistics, calendar and reviews</b><br><span class="muted">Charts, muscle map, records</span></a><h2>Settings</h2><form id="sf" class="card">${FIELDS.map(field).join('')}</form>
+  v.innerHTML = `<h1>Profile</h1><a class="card resume" href="#/stats"><b>Statistics, calendar and reviews</b><br><span class="muted">Charts, muscle map, records</span></a><a class="card resume" href="#/body"><b>Body measurements and photos</b><br><span class="muted">Weight, waist, progress photos</span></a><a class="card resume" href="#/tools"><b>Tools, export and import</b><br><span class="muted">Plate calculator, 1RM, CSV, backup</span></a><h2>Settings</h2><form id="sf" class="card">${FIELDS.map(field).join('')}</form>
     <h2>Account</h2><div class="card">${u ? `<p>${esc(u.email)}</p>
       <button class="btn2" data-a="email">Change email</button><button class="btn2" data-a="pw">Change password</button>
       <button class="btn2" data-a="out">Sign out</button><button class="btn2 danger" data-a="del">Delete account and all data</button>`

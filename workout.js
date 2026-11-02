@@ -139,7 +139,7 @@ export async function liveView(v) {
         x.restSec = parseInt($('#rs', d).value) || x.restSec; d.close();
         if (k === 'warm') {
           const top = Math.max(0, ...x.sets.map(s => s.weight || 0)), r = cfg.rounding || 2.5;
-          if (!top) toast('Enter a working weight first.'); else x.sets.unshift(...cfg.warmupSteps.map(([p, n]) => ({ type: 'warmup', weight: Math.round(top * p / 100 / r) * r, reps: n, done: false, duration: null, distance: null, target: '' })));
+          if (!top) toast('Enter a working weight first.'); else x.sets.unshift(...cfg.warmupSteps.map(({ p, r: n }) => ({ type: 'warmup', weight: Math.round(top * p / 100 / r) * r, reps: n, done: false, duration: null, distance: null, target: '' })));
         } else if (k === 'up' && i > 0) W.exercises.splice(i - 1, 0, ...W.exercises.splice(i, 1));
         else if (k === 'down' && i < W.exercises.length - 1) W.exercises.splice(i + 1, 0, ...W.exercises.splice(i, 1));
         else if (k === 'rep') { const id = await pickExercise(); if (id) { await stats(id); x.exerciseId = id; } }

@@ -10,10 +10,10 @@ const USER_DATA = ['exercises', 'routineFolders', 'routines', 'workouts', 'exerc
 export const DEFAULT_SETTINGS = {
   theme: 'dark', weightUnit: 'kg', distUnit: 'km', weekStart: 'mon', timezone: 'Africa/Casablanca',
   restOn: true, restBig: 150, restSmall: 90, timerSound: 'beep', timerVolume: 'normal', setSound: true,
-  prVolume: 'normal', keepAwake: true, rpe: false, warmupCalc: true, warmupSteps: [[50, 10], [70, 5], [85, 2]],
+  prVolume: 'normal', keepAwake: true, rpe: false, warmupCalc: true, warmupSteps: [{ p: 50, r: 10 }, { p: 70, r: 5 }, { p: 85, r: 2 }],
   rounding: 2.5, barWeight: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], warmupInStats: false, previousFrom: 'exercise',
   // Nutrition (used from its own phase): training-day and rest-day targets, Moroccan spoon (m3l9a) in grams, glass in ml
-  kcalTrain: 0, proteinTrain: 0, carbsTrain: 0, fatTrain: 0, kcalRest: 0, proteinRest: 0, carbsRest: 0, fatRest: 0, spoonG: 12, glassMl: 250
+  kcalTrain: 0, proteinTrain: 0, carbsTrain: 0, fatTrain: 0, kcalRest: 0, proteinRest: 0, carbsRest: 0, fatRest: 0, spoonG: 12, glassMl: 250, customFields: []
 };
 
 // ---------- Local store (demo mode + offline drafts), IndexedDB ----------
@@ -57,7 +57,14 @@ const cloud = {
 };
 const be = () => (mode === 'cloud' ? cloud : local);
 export const get = p => be().get(p);
-export const set = (p, d) => be().set(p, d);
+// Firestore rejects lists inside lists and undefined values. Check every write the same way in demo mode too,
+// so a problem is found and reported here instead of failing silently in the cloud.
+const normSteps = a => (a || []).map(x => (Array.isArray(x) ? { p: x[0], r: x[1] } : x));
+function check(v, path) {
+  if (Array.isArray(v)) v.forEach((x, i) => { if (Array.isArray(x)) throw new Error(`Cannot save: list inside a list at ${path}[${i}]`); check(x, `${path}[${i}]`); });
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { if (x === undefined) throw new Error(`Cannot save: undefined value at ${path}.${k}`); check(x, `${path}.${k}`); }
+}
+export const set = (p, d) => { if (p === 'settings/main' && d?.warmupSteps) d = { ...d, warmupSteps: normSteps(d.warmupSteps) }; check(d, p); return be().set(p, d); };
 export const del = p => be().del(p);
 export const list = c => be().list(c);
 export async function listRange(c, a, b) { // documents whose id is between a and b (dates), so charts read only what they need
@@ -94,7 +101,7 @@ export async function ensureSchema() {
   }
   return { ok: true };
 }
-export const getSettings = async () => ({ ...DEFAULT_SETTINGS, ...((await get('settings/main')) || {}) });
+export const getSettings = async () => { const s = { ...DEFAULT_SETTINGS, ...((await get('settings/main')) || {}) }; s.warmupSteps = normSteps(s.warmupSteps); return s; };
 export const saveSettings = s => set('settings/main', s);
 // Saves only the keys you pass (never overwrites other settings with stale values).
 export async function patchSettings(p) { const n = { ...(await getSettings()), ...p }; await set('settings/main', n); return n; }
@@ -123,6 +130,7 @@ export async function uploadLocal() {
   for (const c of COLLECTIONS) {
     if (c === 'meta') continue;
     for (const { id, ...d } of await local.list(c)) {
+      if (d.warmupSteps) d.warmupSteps = normSteps(d.warmupSteps);
       b.set(ref(`${c}/${id}`), d);
       if (++n % 400 === 0) { await b.commit(); b = fb.writeBatch(db); }
     }
