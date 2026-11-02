@@ -110,3 +110,13 @@ a.card{display:block;text-decoration:none;color:var(--text)}
 .ph small{position:absolute;left:6px;bottom:6px;background:#000a;color:#fff;padding:1px 8px;border-radius:8px;font-weight:600}.ph.sel{outline:3px solid var(--acc)}
 .cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cmp figure{margin:0}.cmp img{width:100%;border-radius:12px}.cmp figcaption{font-size:.8rem;color:var(--mut)}
 .pvimg{width:100%;max-height:55vh;object-fit:contain;border-radius:12px;background:var(--s2)}
+
+.exr{display:grid;grid-template-columns:minmax(0,1fr) 84px 64px;gap:10px;align-items:center;margin:6px 0;width:100%;min-height:52px}
+.exr span small,.exr b small{display:block;font-weight:400;font-size:.75rem}.exr b{text-align:right}
+.spark{width:84px;height:28px}
+.up{color:#2fbf71}.dn{color:var(--err)}
+a.stat{display:block;text-decoration:none;color:var(--text)}
+.sug{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0;padding:8px 12px;border-radius:12px;background:color-mix(in srgb,var(--acc) 14%,transparent)}
+.sug span{flex:1}.sug small{display:block;color:var(--mut);font-size:.75rem}.sug button{min-height:40px;background:var(--acc);color:var(--on);border:0}
+.sug2{border-color:var(--acc)}
+.cmpt td{padding:8px 4px;font-size:.9rem}.cmpt .th td{color:var(--mut);font-size:.8rem;font-weight:400}.cmpt td+td{text-align:right}

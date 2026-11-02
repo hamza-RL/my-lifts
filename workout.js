@@ -2,11 +2,13 @@ import * as S from './store.js';
 import { slug } from './data.js';
 import { exerciseDetail } from './stats.js';
 import { exById, pickExercise, sheet, esc, toast, exName } from './views.js';
+import { suggest, suggestText, parseRange } from './progress.js';
+import { workoutText, copyOrShow } from './textutil.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const COLS = { wr: ['weight', 'reps'], br: ['reps'], wb: ['weight', 'reps'], ab: ['weight', 'reps'], ro: ['reps'], du: ['duration'], dd: ['distance', 'duration'] };
 const HEAD = { weight: 'Weight', reps: 'Reps', duration: 'Seconds', distance: 'Distance' };
-let W = null, cfg = null, ST = {}, timers = [], lock = null, saveT;
+let W = null, cfg = null, ST = {}, timers = [], lock = null, saveT, WS = [];
 
 const flush = () => { clearTimeout(saveT); if (W) S.set('activeWorkout/current', W); };
 // Demo mode saves almost instantly; cloud mode batches (15 s) to save writes, and always flushes when the tab hides.
@@ -80,12 +82,34 @@ function row(x, i, s, j, type) {
     ${cols.map(f => `<input inputmode="decimal" aria-label="${HEAD[f]} ${unit(f)}" data-f="${f}" value="${s[f] ?? ''}" placeholder="${f === 'reps' && s.target || unit(f) || ''}">`).join('')}
     <button class="chk" data-l="ck" aria-label="Complete set">✓</button></div>`;
 }
+const sugOf = x => {
+  if (!(COLS[exById(x.exerciseId)?.type || 'wr'] || COLS.wr).includes('weight')) return null;
+  return suggest(x.exerciseId, WS, cfg, x.sets.map(s => parseRange(s.target)).find(Boolean));
+};
+const sugHtml = x => { const g = sugOf(x); return g ? `<div class="sug"><span>Try <b>${g.weight} ${cfg.weightUnit} × ${g.reps}${g.kind === 'build' ? '+' : ''}</b><small>${esc(g.why)} · last: ${esc(g.last)}</small></span><button data-l="sug">Apply</button></div>` : ''; };
+async function askWeight() { // the first time you start a workout on a day without a weigh-in
+  W.askedW = true; save();
+  const t = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Casablanca' });
+  if ((await S.get('measurements/' + t))?.fields?.weight) return;
+  const d = sheet(`<h3>Today's weight</h3><p class="muted">You have not logged your weight today.</p><label>Weight (${cfg.weightUnit})<input id="aw" inputmode="decimal" placeholder="${cfg.weightUnit}"></label>
+    <div class="row"><button data-w="skip">Skip</button><button class="btn" data-w="save">Save</button></div>`);
+  $('#aw', d).focus();
+  d.onclick = async e => {
+    const a = e.target.dataset.w; if (!a) return;
+    if (a === 'save') {
+      const w = parseFloat($('#aw', d).value.replace(',', '.')); if (!(w > 0)) return toast('Enter your weight.');
+      const { demo, ...o } = (await S.get('measurements/' + t)) || {};
+      await S.set('measurements/' + t, { ...o, date: t, fields: { ...(o.fields || {}), weight: w }, updatedAt: Date.now() }); toast('Weight saved.');
+    }
+    d.close();
+  };
+}
 function draw(v) {
   v.innerHTML = `<header class="top live"><div><input id="wt" class="ttl" maxlength="60" aria-label="Workout title" value="${esc(W.title)}"><small id="dur" class="muted"></small></div>
     <button class="btn fin" data-l="fin">Finish</button></header>
     ${W.exercises.map((x, i) => { const e = exById(x.exerciseId), t = e?.type || 'wr'; return `<section class="card ex" data-i="${i}">
       <div class="rh"><button class="link" data-l="info">${esc(e?.name || x.exerciseId)}</button><button class="icon" data-l="exm" aria-label="Exercise menu">⋯</button></div>
-      <textarea data-k="notes" rows="1" placeholder="Notes" aria-label="Notes">${esc(x.notes)}</textarea>
+      <textarea data-k="notes" rows="1" placeholder="Notes" aria-label="Notes">${esc(x.notes)}</textarea>${sugHtml(x)}
       <div class="sr hd" style="--n:${(COLS[t] || COLS.wr).length}"><span>Set</span><span>Previous</span>${(COLS[t] || COLS.wr).map(f => `<span>${HEAD[f]}</span>`).join('')}<span></span></div>
       ${x.sets.map((s, j) => row(x, i, s, j, t)).join('')}
       <button class="btn2" data-l="add">+ Add set</button></section>`; }).join('')}
@@ -98,7 +122,9 @@ export async function liveView(v) {
   cfg = await S.getSettings();
   W ||= await S.get('activeWorkout/current');
   for (const x of W.exercises) await stats(x.exerciseId);
+  WS = await S.list('workouts');
   draw(v);
+  if (!W.askedW) askWeight();
   timers.forEach(clearInterval); timers = [setInterval(tick, 500)];
   const wl = async () => { try { if (cfg.keepAwake && !document.hidden) lock = await navigator.wakeLock?.request('screen'); } catch { /* unsupported */ } };
   wl(); document.addEventListener('visibilitychange', wl);
@@ -114,6 +140,7 @@ export async function liveView(v) {
     const b = e.target.closest('[data-l]'); if (!b) return;
     const l = b.dataset.l, [x, i, j] = at(b), t = x && (exById(x.exerciseId)?.type || 'wr');
     if (l === 'info') return exerciseDetail(exById(x.exerciseId), 'cha');
+    if (l === 'sug') { const g = sugOf(x); if (!g) return; x.sets.forEach(s => { if (!s.done && s.type === 'normal') { s.weight = g.weight; s.target = String(g.reps); } }); save(); draw(v); return toast(`Set to ${g.weight} ${cfg.weightUnit}`); }
     if (l === 'ck') {
       const s = x.sets[j]; s.done = !s.done;
       if (s.done) {
@@ -201,9 +228,10 @@ export async function historyHtml() {
 export async function showWorkout(id, done) {
   const w = await S.get('workouts/' + id); if (!w) return;
   const d = sheet(`<h3>${esc(w.title)}</h3>${w.exercises.map(x => `<p><b>${esc(exName(x.exerciseId))}</b><br>${x.sets.map(s => `${s.type === 'normal' ? '' : s.type[0].toUpperCase() + ' '}${esc(prevTxt(s, exById(x.exerciseId)?.type || 'wr'))}`).join(' · ')}</p>`).join('')}
-    ${w.notes ? `<p class="muted">${esc(w.notes)}</p>` : ''}<button class="btn2" data-a="rep">Repeat this workout</button><button class="btn2 danger" data-a="del">Delete</button>`);
+    ${w.notes ? `<p class="muted">${esc(w.notes)}</p>` : ''}<button class="btn2" data-a="cp">Copy as text (for AI)</button><button class="btn2" data-a="rep">Repeat this workout</button><button class="btn2 danger" data-a="del">Delete</button>`);
   d.onclick = async e => {
     const a = e.target.dataset.a; if (!a) return;
+    if (a === 'cp') { const c = await S.getSettings(), m = await S.get('measurements/' + new Date(w.startTs).toLocaleDateString('en-CA', { timeZone: 'Africa/Casablanca' })); return copyOrShow(workoutText(w, c, m?.fields?.weight)); }
     if (a === 'del') { if (!confirm('Delete this workout? Records are not recalculated yet.')) return; await S.del('workouts/' + id); d.close(); done(); }
     else { if (await hasActive()) return toast('Finish or discard your current workout first.'); d.close(); await startFrom(w); location.hash = '#/workout'; }
   };

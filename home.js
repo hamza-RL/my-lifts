@@ -1,5 +1,5 @@
 import * as S from './store.js';
-import { esc } from './views.js';
+import { esc, toast } from './views.js';
 import { hasActive, nextRoutine, showWorkout } from './workout.js';
 import { line } from './stats.js';
 
@@ -25,9 +25,14 @@ export async function homeView(v) {
   let streak = 0, c = weeks.has(wk0) ? wk0 : shift(wk0, -7); while (weeks.has(c)) { streak++; c = shift(c, -7); }
   const vol = thisWeek.reduce((a, w) => a + w.exercises.reduce((b, x) => b + x.sets.filter(s => s.type !== 'warmup' || cfg.warmupInStats).reduce((q, s) => q + (s.weight || 0) * (s.reps || 0), 0), 0), 0);
   const ms = ms0.filter(m => m.fields?.weight).sort((a, b) => (a.id < b.id ? -1 : 1)), wl = ms[ms.length - 1], wp = ms.filter(m => m.id <= shift(t, -7)).pop();
+  const tm = ms0.find(m => m.id === t), needW = !tm?.fields?.weight, needM = !(tm && Object.keys(tm.fields || {}).some(k => k !== 'weight' && tm.fields[k] != null));
+  const hr = +new Date().toLocaleString('en-GB', { hour: 'numeric', hour12: false, timeZone: TZ }), dmy = x => new Date(x).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: TZ });
   const left = T.k ? Math.round(T.k - e.k) : null, lw = ws[0];
   v.innerHTML = `<h1>My Lifts</h1><p class="muted">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: TZ })}</p>
     ${active ? '<a class="card resume" href="#/workout"><b>Workout in progress</b><br><span class="muted">Tap to resume</span></a>' : ''}
+    ${needW || needM ? `<div class="card warn"><b>${hr < 12 ? 'Morning check-in' : 'Daily check-in'}</b>
+      ${needW ? `<p class="muted">Weigh yourself (best in the morning, before eating).</p><div class="row"><input id="hw" inputmode="decimal" placeholder="Weight (${cfg.weightUnit})" aria-label="Weight"><button class="btn" data-hw style="width:auto">Save</button></div>` : '<p>Weight logged today.</p>'}
+      ${needM ? '<p class="muted">Take your body measurements.</p><a class="btn tgl" href="#/body">Open measurements</a>' : '<p>Measurements logged today.</p>'}</div>` : ''}
     ${!S.cloudConfigured ? '<div class="card warn"><b>Demo mode</b><p>Your data stays on this device. Add your Firebase config to sync.</p></div>' : (await S.localCount()) ? '<div class="card warn"><b>Data found on this device</b><p>Upload your demo data to your account?</p><button class="btn" data-a="upload">Upload my local data</button></div>' : ''}
     ${next && !active ? `<a class="card next" href="#/workout"><small class="muted">Up next</small><b>${esc(next.title)}</b><span class="muted">${next.exercises.length} exercises · tap to start</span></a>` : ''}
     <div class="card"><div class="rh"><b>Calories today</b><a href="#/food">Open diary</a></div>
@@ -36,8 +41,16 @@ export async function homeView(v) {
     <div class="grid2"><div class="stat"><b>${avg ? avg + ' min' : '–'}</b><small>Average session (30 days)</small></div><div class="stat"><b>${thisWeek.length}</b><small>Workouts this week</small></div>
       <div class="stat"><b>${Math.round(thisWeek.reduce((a, w) => a + min(w), 0))} min</b><small>Gym time this week</small></div><div class="stat"><b>${streak}</b><small>Week streak</small></div></div>
     <div class="card"><div class="rh"><b>Weight</b><span class="muted">${wl ? r1(wl.fields.weight) + ' ' + cfg.weightUnit : 'no weigh-ins yet'}</span></div>
-      ${wl && wp ? `<p class="muted">${wl.fields.weight - wp.fields.weight >= 0 ? '+' : ''}${r1(wl.fields.weight - wp.fields.weight)} ${cfg.weightUnit} vs a week ago</p>` : '<p class="muted">Add a weigh-in in the Food diary.</p>'}${ms.length > 1 ? line(ms.map(m => ({ x: new Date(m.id).getTime(), y: m.fields.weight }))) : ''}</div>
+      ${wl && wp ? `<p class="muted">${wl.fields.weight - wp.fields.weight >= 0 ? '+' : ''}${r1(wl.fields.weight - wp.fields.weight)} ${cfg.weightUnit} vs a week ago</p>` : '<p class="muted">Log your weight in the check-in above.</p>'}${ms.length > 1 ? line(ms.map(m => ({ x: new Date(m.id).getTime(), y: m.fields.weight })), r1, dmy) : ''}</div>
     <div class="card"><b>This week's volume</b><p class="big2">${Math.round(vol).toLocaleString('en-GB')} ${cfg.weightUnit}</p></div>
     ${lw ? `<button class="item hist" data-h="${esc(lw.id)}"><span><b>Last: ${esc(lw.title)}</b><small>${new Date(lw.startTs).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: TZ })} · ${Math.round(min(lw))} min · ${lw.exercises.reduce((n, x) => n + x.sets.length, 0)} sets</small></span></button>` : ''}`;
-  v.onclick = ev => { const b = ev.target.closest('[data-h]'); if (b) showWorkout(b.dataset.h, () => homeView(v)); };
+  v.onclick = async ev => {
+    if (ev.target.closest('[data-hw]')) {
+      const w = parseFloat(v.querySelector('#hw').value.replace(',', '.')); if (!(w > 0)) return toast('Enter your weight.');
+      const { demo, ...o } = (await S.get('measurements/' + t)) || {};
+      await S.set('measurements/' + t, { ...o, date: t, fields: { ...(o.fields || {}), weight: w }, updatedAt: Date.now() });
+      toast('Weight saved.'); return homeView(v);
+    }
+    const b = ev.target.closest('[data-h]'); if (b) showWorkout(b.dataset.h, () => homeView(v));
+  };
 }
