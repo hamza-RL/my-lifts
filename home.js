@@ -30,6 +30,7 @@ export async function homeView(v) {
   const left = T.k ? Math.round(T.k - e.k) : null, lw = ws[0];
   v.innerHTML = `<h1>My Lifts</h1><p class="muted">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: TZ })}</p>
     ${active ? '<a class="card resume" href="#/workout"><b>Workout in progress</b><br><span class="muted">Tap to resume</span></a>' : ''}
+    ${Date.now() - S.lastBackup() > 6048e5 ? '<div class="card warn"><b>Back up your data</b><p class="muted">No backup in the last 7 days.</p><button class="btn" data-a="share">Send backup to Drive or another app</button></div>' : ''}
     ${needW || needM ? `<div class="card warn"><b>${hr < 12 ? 'Morning check-in' : 'Daily check-in'}</b>
       ${needW ? `<p class="muted">Weigh yourself (best in the morning, before eating).</p><div class="row"><input id="hw" inputmode="decimal" placeholder="Weight (${cfg.weightUnit})" aria-label="Weight"><button class="btn" data-hw style="width:auto">Save</button></div>` : '<p>Weight logged today.</p>'}
       ${needM ? '<p class="muted">Take your body measurements.</p><a class="btn tgl" href="#/body">Open measurements</a>' : '<p>Measurements logged today.</p>'}</div>` : ''}

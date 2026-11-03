@@ -49,16 +49,6 @@ function toast(m) {
   t.textContent = m; t.hidden = false;
   clearTimeout(t._t); t._t = setTimeout(() => t.hidden = true, 3500);
 }
-function ask(title, fields) {
-  return new Promise(res => {
-    const d = document.createElement('dialog');
-    d.innerHTML = `<form method="dialog"><h3>${esc(title)}</h3>${fields.map(([n, l, t]) =>
-      `<label>${esc(l)}<input name="${n}" type="${t || 'text'}" required autocomplete="off"></label>`).join('')}
-      <div class="row"><button value="x" formnovalidate>Cancel</button><button value="ok" class="btn">Save</button></div></form>`;
-    document.body.append(d); d.showModal();
-    d.onclose = () => { res(d.returnValue === 'ok' ? Object.fromEntries(new FormData(d.querySelector('form'))) : null); d.remove(); };
-  });
-}
 function applyTheme() {
   document.documentElement.dataset.theme = settings.theme;
   try { localStorage.setItem('ml-theme', settings.theme); } catch { /* ignore */ }
@@ -75,7 +65,15 @@ function showAuth() {
       ${m === 'reset' ? '' : `<label>Password<input name="pw" type="password" required minlength="6" autocomplete="${m === 'in' ? 'current-password' : 'new-password'}"></label>`}
       <p id="err" class="err" role="alert"></p>
       <button class="btn">${{ in: 'Sign in', up: 'Create account', reset: 'Send reset email' }[m]}</button>
-      <p class="links"><a href="#" data-m="reset">Forgot password?</a></p></form></main>`;
+      <p class="links"><a href="#" data-m="reset">Forgot password?</a></p>
+      <p class="links"><a href="#" id="rec">Recover data saved on this phone</a></p></form></main>`;
+    $('#rec').onclick = async e => {
+      e.preventDefault();
+      const { last, best } = await S.deviceSnapshots();
+      if (!last) return toast('No safety copy found on this phone yet.');
+      S.saveFile(last, 'my-lifts-latest-copy.json'); if (best) setTimeout(() => S.saveFile(best, 'my-lifts-biggest-copy.json'), 800);
+      toast('Saved. Log in to a new account, then use Restore from a backup file.');
+    };
     root.querySelectorAll('[data-m]').forEach(a => a.onclick = e => { e.preventDefault(); m = a.dataset.m; draw(); });
     $('#af').onsubmit = async e => {
       e.preventDefault();
@@ -119,10 +117,9 @@ async function profile(v) {
       : `<input type="number" inputmode="decimal" step="any" min="0" data-k="${k}" value="${esc(settings[k])}">`) + '</label>';
   v.innerHTML = `<h1>Profile</h1><a class="card resume" href="#/stats"><b>Statistics, calendar and reviews</b><br><span class="muted">Charts, muscle map, records</span></a><a class="card resume" href="#/history"><b>Workout history</b><br><span class="muted">Look back at every session, copy as text for AI</span></a><a class="card resume" href="#/compare"><b>Compare weeks and months</b><br><span class="muted">See how your strength changed</span></a><a class="card resume" href="#/body"><b>Body measurements and photos</b><br><span class="muted">Weight, waist, progress photos</span></a><a class="card resume" href="#/tools"><b>Tools, export and import</b><br><span class="muted">Plate calculator, 1RM, CSV, backup</span></a><h2>Settings</h2><form id="sf" class="card">${FIELDS.map(field).join('')}</form>
     <h2>Account</h2><div class="card">${u ? `<p>${esc(u.email)}</p>
-      <button class="btn2" data-a="email">Change email</button><button class="btn2" data-a="pw">Change password</button>
-      <button class="btn2" data-a="out">Sign out</button><button class="btn2 danger" data-a="del">Delete account and all data</button>`
+      <button class="btn2" data-a="out">Sign out</button>`
       : '<p class="muted">Demo mode: no account yet.</p>'}</div>
-    <h2>Data</h2><div class="card"><button class="btn2" data-a="backup">Download JSON backup</button><button class="btn2" data-a="seed">Import my starting numbers</button><button class="btn2" data-a="demo">Load a year of demo data</button><button class="btn2 danger" data-a="undemo">Delete demo data</button></div>
+    <h2>Data</h2><div class="card"><p class="muted"><small>Last backup: ${S.lastBackup() ? new Date(S.lastBackup()).toLocaleDateString('en-GB') : 'never'}. A safety copy is also kept on this phone automatically.</small></p><button class="btn2" data-a="backup">Download backup file</button><button class="btn2" data-a="share">Send backup to Google Drive or another app</button><button class="btn2" data-a="restore">Restore from a backup file</button><input type="file" id="rf" accept=".json,application/json" hidden><button class="btn2" data-a="seed">Import my starting numbers</button><button class="btn2" data-a="demo">Load a year of demo data</button><button class="btn2 danger" data-a="undemo">Delete demo data</button></div>
     <h2>About</h2><div class="card"><p>App version: <b id="ver">${esc(version)}</b><br>Data schema version: <b>${S.SCHEMA_VERSION}</b><br>
       Mode: ${S.cloudConfigured ? 'Cloud sync' : 'Demo (this device only)'}</p><button class="btn2" data-a="check">Check for updates</button></div>`;
   $('#sf').onchange = async e => {
@@ -136,10 +133,20 @@ async function profile(v) {
 }
 
 document.addEventListener('click', async e => {
-  const a = e.target.closest('[data-a]'); if (!a) return;
+  const a = e.target.closest('[data-a]'); if (!a || a.closest('dialog')) return; // buttons inside pop-up sheets are never handled here
   const k = a.dataset.a;
   try {
-    if (k === 'backup') await S.downloadBackup();
+    if (k === 'backup') { await S.downloadBackup(); toast('Backup downloaded.'); }
+    else if (k === 'share') { toast((await S.shareBackup()) ? 'Backup sent.' : 'Backup downloaded.'); }
+    else if (k === 'restore') {
+      const f = $('#rf'); f.value = ''; f.onchange = async () => {
+        try {
+          const o = JSON.parse(await f.files[0].text());
+          if (!confirm('Put everything from this backup into the account you are logged in to? Nothing is deleted.')) return;
+          toast('Restoring…'); toast(`Restored ${await S.importBackup(o)} items.`); route();
+        } catch (err) { toast(S.errMsg(err)); }
+      }; f.click();
+    }
     else if (k === 'check') { await reg?.update(); toast('You are up to date, or an update banner will appear.'); }
     else if (k === 'upd') { refreshing = true; reg.waiting?.postMessage('skip'); }
     else if (k === 'seed') toast(`Imported ${await importStart()} exercises`);
@@ -148,16 +155,6 @@ document.addEventListener('click', async e => {
     else if (k === 'out') await S.logOut();
     else if (k === 'upload') {
       if (confirm('Upload local data to your account and clear the local copy?')) { toast(`Uploaded ${await S.uploadLocal()} items`); route(); }
-    } else if (k === 'email') {
-      const r = await ask('Change email', [['email', 'New email', 'email'], ['pw', 'Current password', 'password']]);
-      if (r) { await S.changeEmail(r.email, r.pw); toast('Check your new inbox to confirm the change.'); }
-    } else if (k === 'pw') {
-      const r = await ask('Change password', [['o', 'Current password', 'password'], ['n', 'New password', 'password']]);
-      if (r) { await S.changePassword(r.o, r.n); toast('Password changed.'); }
-    } else if (k === 'del') {
-      if (!confirm('Delete your account and ALL your data permanently? This cannot be undone.')) return;
-      const r = await ask('Confirm with your password', [['pw', 'Password', 'password']]);
-      if (r) { await S.deleteAccount(r.pw); toast('Account deleted.'); }
     }
   } catch (err) { toast(S.errMsg(err)); }
 });
@@ -196,5 +193,6 @@ S.watchAuth(async u => {
       return;
     }
     await seedOnce(); settings = await S.getSettings(); applyTheme(); shell();
+    S.autoSnapshot().catch(() => {});
   } catch (e) { fatal(e); }
 }).catch(fatal);

@@ -112,14 +112,46 @@ export async function exportAll() {
   for (const c of COLLECTIONS) out.data[c] = await list(c);
   return out;
 }
-export async function downloadBackup() {
-  const blob = new Blob([JSON.stringify(await exportAll(), null, 1)], { type: 'application/json' });
+const stamp = () => { try { localStorage.setItem('mylifts-lastbackup', String(Date.now())); } catch { /* ignore */ } };
+export const lastBackup = () => { try { return +localStorage.getItem('mylifts-lastbackup') || 0; } catch { return 0; } };
+export function saveFile(obj, name) {
+  const blob = new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `my-lifts-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+const bname = () => `my-lifts-backup-${new Date().toISOString().slice(0, 10)}.json`;
+export async function downloadBackup() { saveFile(await exportAll(), bname()); stamp(); }
+// Opens the phone's share sheet so the backup can go to Google Drive, email, WhatsApp, etc.
+export async function shareBackup() {
+  const file = new File([JSON.stringify(await exportAll(), null, 1)], bname(), { type: 'application/json' });
+  if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: 'My Lifts backup' }); stamp(); return true; }
+  await downloadBackup(); return false;
+}
+// Puts a backup file's data into the account you are logged in to. Same ids are overwritten, nothing else is deleted.
+export async function importBackup(o) {
+  if (o?.app !== 'my-lifts' || !o.data) throw new Error('This is not a My Lifts backup file.');
+  let n = 0;
+  for (const c of COLLECTIONS) {
+    if (c === 'meta' || c === 'activeWorkout') continue;
+    for (const { id, ...d } of o.data[c] || []) { if (d.warmupSteps) d.warmupSteps = normSteps(d.warmupSteps); await be().set(`${c}/${id}`, d); n++; }
+  }
+  return n;
+}
+// Safety copy kept inside this phone's browser, separate from your account. It survives a lost login.
+const sdb = () => new Promise((res, rej) => { const r = indexedDB.open('mylifts-safe', 1); r.onupgradeneeded = () => r.result.createObjectStore('s'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const sget = async k => { const d = await sdb(); return new Promise((res, rej) => { const r = d.transaction('s').objectStore('s').get(k); r.onsuccess = () => res(r.result || null); r.onerror = () => rej(r.error); }); };
+const sput = async (k, v) => { const d = await sdb(); return new Promise((res, rej) => { const t = d.transaction('s', 'readwrite'); t.objectStore('s').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); };
+const count = o => Object.entries(o.data).reduce((a, [c, l]) => a + (USER_DATA.includes(c) ? l.length : 0), 0);
+export async function autoSnapshot() {
+  let at = 0; try { at = +localStorage.getItem('mylifts-snap') || 0; } catch { /* ignore */ }
+  if (Date.now() - at < 12 * 36e5) return;
+  const o = await exportAll(), n = count(o); if (!n) return;
+  await sput('last', o);
+  const best = await sget('best'); if (!best || n >= count(best)) await sput('best', o);
+  try { localStorage.setItem('mylifts-snap', String(Date.now())); } catch { /* ignore */ }
+}
+export async function deviceSnapshots() { return { last: await sget('last'), best: await sget('best') }; }
 export async function localCount() {
   let n = 0;
   for (const c of USER_DATA) n += (await local.list(c)).length;
@@ -150,24 +182,8 @@ const ERR = {
   'auth/requires-recent-login': 'Sign out, sign in again, then retry.',
   'permission-denied': 'Permission denied. Check the Firestore rules in the Firebase console.'
 };
-export const errMsg = e => ERR[e?.code] || e?.message || String(e);
+export const errMsg = e => (ERR[e?.code] ? ERR[e.code] + (String(e.code).startsWith('auth/') ? ` [${e.code}]` : '') : e?.message || String(e));
 export const signIn = (e, p) => fb.signInWithEmailAndPassword(auth, e, p);
 export const signUp = (e, p) => fb.createUserWithEmailAndPassword(auth, e, p);
 export const resetPassword = e => fb.sendPasswordResetEmail(auth, e);
 export const logOut = () => fb.signOut(auth);
-const reauth = pw => fb.reauthenticateWithCredential(auth.currentUser,
-  fb.EmailAuthProvider.credential(auth.currentUser.email, pw));
-export async function changeEmail(email, pw) { await reauth(pw); await fb.verifyBeforeUpdateEmail(auth.currentUser, email); }
-export async function changePassword(oldPw, newPw) { await reauth(oldPw); await fb.updatePassword(auth.currentUser, newPw); }
-export async function deleteAccount(pw) {
-  await reauth(pw);
-  for (const c of COLLECTIONS) {
-    let b = fb.writeBatch(db), n = 0;
-    for (const d of (await fb.getDocs(cref(c))).docs) {
-      b.delete(d.ref);
-      if (++n % 400 === 0) { await b.commit(); b = fb.writeBatch(db); }
-    }
-    await b.commit();
-  }
-  await fb.deleteUser(auth.currentUser);
-}
