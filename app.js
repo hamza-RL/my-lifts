@@ -28,6 +28,8 @@ const FIELDS = [
   ['setSound', 'Sound when a set is checked', 'check'],
   ['prVolume', 'New record notification volume', 'select', VOL],
   ['keepAwake', 'Keep screen awake during workouts', 'check'],
+  ['restNote', 'Rest notification with end time, and a buzz when rest is over', 'check'],
+  ['bgTimer', 'Beeps when the app is closed (WARNING: this pauses your music)', 'check'],
   ['rpe', 'Log RPE', 'check'],
   ['warmupCalc', 'Warm-up calculator', 'check'],
   ['rounding', 'Round weights to', 'num'],

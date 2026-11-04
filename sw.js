@@ -1,7 +1,7 @@
 // Change VERSION on every release: it triggers the "update available" banner and refreshes the cache.
-const VERSION = '2.1.1';
+const VERSION = '2.3.0';
 const CACHE = 'mylifts-' + VERSION, CDN = 'mylifts-cdn';
-const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'stats.js', 'body.js', 'home.js', 'measure.js', 'tools.js', 'foods.js', 'food.js', 'demo.js', 'history.js', 'compare.js', 'progress.js', 'textutil.js', 'firebase-config.js', 'manifest.json',
+const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'data.js', 'views.js', 'workout.js', 'stats.js', 'body.js', 'home.js', 'measure.js', 'tools.js', 'foods.js', 'food.js', 'demo.js', 'history.js', 'bgtimer.js', 'floatwin.js', 'compare.js', 'progress.js', 'textutil.js', 'firebase-config.js', 'manifest.json',
   'icon-192.png', 'icon-512.png', 'icon-maskable.png'];
 
 self.addEventListener('install', e => e.waitUntil(
@@ -32,4 +32,9 @@ self.addEventListener('fetch', e => {
       return m || n;
     }));
   }
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(l => (l[0] ? l[0].focus() : clients.openWindow('./'))));
 });

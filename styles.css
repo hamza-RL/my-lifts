@@ -120,3 +120,6 @@ a.stat{display:block;text-decoration:none;color:var(--text)}
 .sug span{flex:1}.sug small{display:block;color:var(--mut);font-size:.75rem}.sug button{min-height:40px;background:var(--acc);color:var(--on);border:0}
 .sug2{border-color:var(--acc)}
 .cmpt td{padding:8px 4px;font-size:.9rem}.cmpt .th td{color:var(--mut);font-size:.8rem;font-weight:400}.cmpt td+td{text-align:right}
+
+.pipb{min-height:44px;padding:0 12px;font-size:.85rem;margin-left:auto}
+.live .pipb+.fin{margin-left:8px}

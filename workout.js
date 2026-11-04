@@ -3,6 +3,8 @@ import { slug } from './data.js';
 import { exerciseDetail } from './stats.js';
 import { exById, pickExercise, sheet, esc, toast, exName } from './views.js';
 import { suggest, suggestText, parseRange } from './progress.js';
+import * as BG from './bgtimer.js';
+import * as FW from './floatwin.js';
 import { workoutText, copyOrShow } from './textutil.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -50,9 +52,20 @@ const prevOf = (x, j) => {
 };
 const prevTxt = (p, type) => !p ? '–' : (COLS[type] || COLS.wr).map(f => p[f] != null ? p[f] : '').filter(x => x !== '').join(' × ') || '–';
 
+// Background rest timer: notification + sound when you leave the app. Turn it off in Profile if it pauses your music.
+function bgRest(secs) {
+  FW.askPerm(); FW.rest(secs > 0 && W.rest ? W.rest.end : 0, W.title, cfg);
+  if (!cfg.bgTimer) return;
+  if (!(secs > 0)) return BG.stop();
+  BG.askPerm();
+  BG.start(secs, W.title, cfg, {
+    skip: () => { W.rest = null; BG.stop(); FW.cancelRest(); tick(); save(); },
+    add: d => { if (!W.rest) return; W.rest.end += d * 1000; const l = Math.ceil((W.rest.end - Date.now()) / 1000); if (l > 0) bgRest(l); else { W.rest = null; BG.stop(); FW.cancelRest(); } tick(); save(); }
+  });
+}
 function beep() {
   const g = { off: 0, low: .1, normal: .3, high: .8 }[cfg.timerVolume];
-  if (cfg.timerSound !== 'none' && g) try {
+  if (cfg.timerSound !== 'none' && g && !BG.active()) try {
     const c = new AudioContext(), o = c.createOscillator(), a = c.createGain();
     o.frequency.value = cfg.timerSound === 'chime' ? 880 : 660; a.gain.value = g; o.connect(a); a.connect(c.destination); o.start(); o.stop(c.currentTime + .4);
   } catch { /* audio blocked */ }
@@ -106,7 +119,7 @@ async function askWeight() { // the first time you start a workout on a day with
 }
 function draw(v) {
   v.innerHTML = `<header class="top live"><div><input id="wt" class="ttl" maxlength="60" aria-label="Workout title" value="${esc(W.title)}"><small id="dur" class="muted"></small></div>
-    <button class="btn fin" data-l="fin">Finish</button></header>
+    ${FW.supported() ? '<button class="btn2 pipb" data-l="pip">Floating timer</button>' : ''}<button class="btn fin" data-l="fin">Finish</button></header>
     ${W.exercises.map((x, i) => { const e = exById(x.exerciseId), t = e?.type || 'wr'; return `<section class="card ex" data-i="${i}">
       <div class="rh"><button class="link" data-l="info">${esc(e?.name || x.exerciseId)}</button><button class="icon" data-l="exm" aria-label="Exercise menu">⋯</button></div>
       <textarea data-k="notes" rows="1" placeholder="Notes" aria-label="Notes">${esc(x.notes)}</textarea>${sugHtml(x)}
@@ -123,6 +136,7 @@ export async function liveView(v) {
   W ||= await S.get('activeWorkout/current');
   for (const x of W.exercises) await stats(x.exerciseId);
   WS = await S.list('workouts');
+  FW.info(W.title, W.startTs);
   draw(v);
   if (!W.askedW) askWeight();
   timers.forEach(clearInterval); timers = [setInterval(tick, 500)];
@@ -139,6 +153,7 @@ export async function liveView(v) {
   v.onclick = async e => {
     const b = e.target.closest('[data-l]'); if (!b) return;
     const l = b.dataset.l, [x, i, j] = at(b), t = x && (exById(x.exerciseId)?.type || 'wr');
+    if (l === 'pip') { FW.info(W.title, W.startTs); FW.askPerm(); return FW.open().catch(() => toast('Your browser cannot show a floating timer here.')); }
     if (l === 'info') return exerciseDetail(exById(x.exerciseId), 'cha');
     if (l === 'sug') { const g = sugOf(x); if (!g) return; x.sets.forEach(s => { if (!s.done && s.type === 'normal') { s.weight = g.weight; s.target = String(g.reps); } }); save(); draw(v); return toast(`Set to ${g.weight} ${cfg.weightUnit}`); }
     if (l === 'ck') {
@@ -150,7 +165,7 @@ export async function liveView(v) {
         if (s.type !== 'warmup' && s.reps && ((w && w > (rec.heaviest || 0) && rec.heaviest) || (e1rm(w, s.reps) > (rec.best1RM || 0) && rec.best1RM))) {
           toast(w > (rec.heaviest || 0) ? 'New PR: heaviest weight' : 'New PR: best estimated 1RM'); if (cfg.prVolume !== 'off') navigator.vibrate?.([80, 60, 80]);
         }
-        if (cfg.restOn && x.sets[j + 1]?.type !== 'drop' && s.type !== 'drop') W.rest = { end: Date.now() + x.restSec * 1000 };
+        if (cfg.restOn && x.sets[j + 1]?.type !== 'drop' && s.type !== 'drop') { W.rest = { end: Date.now() + x.restSec * 1000 }; bgRest(x.restSec); }
       }
       save(); draw(v);
     } else if (l === 'pv') { const p = prevOf(x, j); if (p) (COLS[t] || COLS.wr).forEach(f => { if (p[f] != null) x.sets[j][f] = p[f]; }); save(); draw(v); }
@@ -177,9 +192,9 @@ export async function liveView(v) {
       const id = await pickExercise(); if (!id) return; await stats(id);
       W.exercises.push({ exerciseId: id, notes: '', restSec: cfg.restSmall, sets: [{ type: 'normal', weight: null, reps: null, duration: null, distance: null, done: false, target: '' }] });
       save(); draw(v);
-    } else if (l === 'r-15' || l === 'r+15') { if (W.rest) W.rest.end += (l === 'r+15' ? 15000 : -15000); tick(); save(); }
-    else if (l === 'rskip') { W.rest = null; tick(); save(); }
-    else if (l === 'disc') { if (confirm('Discard this workout? This cannot be undone.')) { W = null; await S.del('activeWorkout/current'); goWorkout(); } }
+    } else if (l === 'r-15' || l === 'r+15') { if (W.rest) { W.rest.end += (l === 'r+15' ? 15000 : -15000); bgRest(Math.ceil((W.rest.end - Date.now()) / 1000)); } tick(); save(); }
+    else if (l === 'rskip') { W.rest = null; BG.stop(); FW.cancelRest(); tick(); save(); }
+    else if (l === 'disc') { if (confirm('Discard this workout? This cannot be undone.')) { W = null; BG.stop(); FW.end(); await S.del('activeWorkout/current'); goWorkout(); } }
     else if (l === 'fin') finish(v);
   };
 }
@@ -216,7 +231,7 @@ async function finish(v) {
       S.set('routines/r_' + Date.now().toString(36), { title: w.title, order: 99, folderId: null, updatedAt: Date.now(), exercises: done.map(x => ({ exerciseId: x.exerciseId, restSec: x.restSec, notes: '', supersetId: null, sets: x.sets.map(s => ({ type: s.type, weight: s.weight, repsMin: s.reps, repsMax: s.reps })) })) });
     }
     if (w.routineId) { const rs = (await S.list('routines')).sort((a, b) => a.order - b.order), i = rs.findIndex(r => r.id === w.routineId); if (i >= 0) S.set('meta/plan', { nextId: rs[(i + 1) % rs.length].id, updatedAt: Date.now() }); }
-    W = null; ST = {}; await S.del('activeWorkout/current'); d.close();
+    W = null; ST = {}; BG.stop(); FW.end(); await S.del('activeWorkout/current'); d.close();
     toast(prs.length ? 'Saved. New PR: ' + prs.slice(0, 2).join(', ') : 'Workout saved.'); goWorkout();
   };
 }

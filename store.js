@@ -10,7 +10,7 @@ const USER_DATA = ['exercises', 'routineFolders', 'routines', 'workouts', 'exerc
 export const DEFAULT_SETTINGS = {
   theme: 'dark', weightUnit: 'kg', distUnit: 'km', weekStart: 'mon', timezone: 'Africa/Casablanca',
   restOn: true, restBig: 150, restSmall: 90, timerSound: 'beep', timerVolume: 'normal', setSound: true,
-  prVolume: 'normal', keepAwake: true, rpe: false, warmupCalc: true, warmupSteps: [{ p: 50, r: 10 }, { p: 70, r: 5 }, { p: 85, r: 2 }],
+  prVolume: 'normal', keepAwake: true, bgTimer: false, restNote: true, rpe: false, warmupCalc: true, warmupSteps: [{ p: 50, r: 10 }, { p: 70, r: 5 }, { p: 85, r: 2 }],
   rounding: 2.5, barWeight: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25], warmupInStats: false, previousFrom: 'exercise',
   // Nutrition (used from its own phase): training-day and rest-day targets, Moroccan spoon (m3l9a) in grams, glass in ml
   kcalTrain: 0, proteinTrain: 0, carbsTrain: 0, fatTrain: 0, kcalRest: 0, proteinRest: 0, carbsRest: 0, fatRest: 0, spoonG: 12, glassMl: 250, customFields: []
